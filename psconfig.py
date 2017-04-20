@@ -25,6 +25,9 @@ import sys
 from collections import namedtuple
 
 
+from pscommon import *
+
+
 # список расширений файлов
 IMAGE_FILE_EXTS = set(['jpg', 'jpeg', 'tif', 'tiff', 'png'])
 RAW_FILE_EXTS   = set(['dng', '3fr', 'arw', 'srf', 'sr2',
@@ -35,23 +38,17 @@ RAW_FILE_EXTS   = set(['dng', '3fr', 'arw', 'srf', 'sr2',
                        'pef', 'srw', 'x3f'])
 
 
-def __exception_to_str(ex):
-    exs = str(ex)
-    if not exs:
-        exs = ex.__class__.__name__
-
-    return exs
-
-
 class Configuration():
     CS_SETTINGS = 'settings'
     CV_PHOTO_ROOT_DIR = 'photo_root_dir'
+    CV_STAT_SAVE_FILE = 'stat_save_file'
     CV_SCAN_RAW_FILES = 'scan_raw_files'
     CV_SCAN_IMAGE_FILES = 'scan_image_files'
     CV_RAW_FILE_EXTS = 'raw_file_extensions'
     CV_IMAGE_FILE_EXTENSIONS = 'image_file_extensions'
 
     DEF_PHOTO_ROOT_DIR = os.path.expanduser('~')
+    DEF_STAT_SAVE_DIR = os.path.expanduser('~/photo-statistics.txt')
     DEF_SCAN_RAW_FILES = True
     DEF_SCAN_IMAGE_FILES = False
 
@@ -63,6 +60,7 @@ class Configuration():
         self.cfgFN = fname
 
         self.cfgPhotoRootDir = self.DEF_PHOTO_ROOT_DIR
+        self.cfgStatSaveFile = self.DEF_STAT_SAVE_DIR
 
         self.cfgScanRAWfiles = self.DEF_SCAN_RAW_FILES
         self.cfgScanImageFiles = self.DEF_SCAN_IMAGE_FILES
@@ -73,12 +71,16 @@ class Configuration():
     def __str__(self):
         return '''self.cfgFN = '%s'
 self.cfgPhotoRootDir = '%s'
+self.cfgStatSaveFile = '%s'
 self.cfgScanRAWfiles = %s
 self.cfgScanImageFiles = %s
 self.cfgRAWFileExtensions = %s
 self.cfgImageFileExtensions = %s''' % (self.cfgFN,
-            self.cfgPhotoRootDir, self.cfgScanRAWfiles,
-            self.cfgScanImageFiles, self.cfgRAWFileExtensions,
+            self.cfgPhotoRootDir,
+            self.cfgStatSaveFile,
+            self.cfgScanRAWfiles,
+            self.cfgScanImageFiles,
+            self.cfgRAWFileExtensions,
             self.cfgImageFileExtensions)
 
     def load(self):
@@ -95,9 +97,10 @@ self.cfgImageFileExtensions = %s''' % (self.cfgFN,
                     cfg.read_file(f, self.cfgFN)
 
             except Exception as ex:
-                return 'Ошибка загрузки настроек - %s' % __exception_to_str(ex)
+                return 'Ошибка загрузки настроек - %s' % exception_to_str(ex)
 
         self.cfgPhotoRootDir = os.path.abspath(cfg.get(self.CS_SETTINGS, self.CV_PHOTO_ROOT_DIR, fallback=self.DEF_PHOTO_ROOT_DIR))
+        self.cfgStatSaveFile = os.path.abspath(cfg.get(self.CS_SETTINGS, self.CV_STAT_SAVE_FILE, fallback=self.DEF_STAT_SAVE_DIR))
 
         self.cfgScanRAWfiles = cfg.getboolean(self.CS_SETTINGS, self.CV_SCAN_RAW_FILES, fallback=self.DEF_SCAN_RAW_FILES)
         self.cfgScanImageFiles = cfg.getboolean(self.CS_SETTINGS, self.CV_SCAN_IMAGE_FILES, fallback=self.DEF_SCAN_IMAGE_FILES)
@@ -124,12 +127,13 @@ self.cfgImageFileExtensions = %s''' % (self.cfgFN,
             try:
                 os.makedirs(cfgDir, exist_ok=True)
             except OSError as ex:
-                return 'Не удалось создать каталог "%s" - %s' % (cfgDir, __exception_to_str(ex))
+                return 'Не удалось создать каталог "%s" - %s' % (cfgDir, exception_to_str(ex))
 
         cfg = ConfigParser()
         cfg.add_section(self.CS_SETTINGS)
 
         cfg.set(self.CS_SETTINGS, self.CV_PHOTO_ROOT_DIR, self.cfgPhotoRootDir)
+        cfg.set(self.CS_SETTINGS, self.CV_STAT_SAVE_FILE, self.cfgStatSaveFile)
 
         cfg.set(self.CS_SETTINGS, self.CV_SCAN_RAW_FILES, str(self.cfgScanRAWfiles))
         cfg.set(self.CS_SETTINGS, self.CV_SCAN_IMAGE_FILES, str(self.cfgScanImageFiles))
@@ -144,7 +148,7 @@ self.cfgImageFileExtensions = %s''' % (self.cfgFN,
             with open(self.cfgFN, 'w+') as f:
                 cfg.write(f)
         except Exception as ex:
-                return 'Не удалось сохранить файл настроек "%s" - %s' % (cfgFN, __exception_to_str(ex))
+                return 'Не удалось сохранить файл настроек "%s" - %s' % (cfgFN, exception_to_str(ex))
 
     def check_fields(self):
         """Проверка правильности заполнения полей.
@@ -216,8 +220,8 @@ resourcePaths = get_resource_paths()
 
 
 if __name__ == '__main__':
-    print(resourcePaths)
-    exit(0)
+    #print(resourcePaths)
+    #exit(0)
 
     cfp = get_config_file_name()
     print(cfp)
@@ -230,4 +234,4 @@ if __name__ == '__main__':
     else:
         print(sets)
 
-    sets.save()
+    #sets.save()

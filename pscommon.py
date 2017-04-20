@@ -23,3 +23,9 @@ APP_VERSION = u'1.0'
 APP_COPYRIGHT = u'Copyright 2017 MC-6312'
 
 
+def exception_to_str(ex):
+    exs = str(ex)
+    if not exs:
+        exs = ex.__class__.__name__
+
+    return exs

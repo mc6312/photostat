@@ -352,10 +352,49 @@ class PhotoStatUI():
         self.check_picdirpage_content() # ибо какие-то параметры уже указаны
 
     def save_stat_to_file(self):
-        message_dialog(self.window, APP_TITLE, 'save_stat_to_tile() not yet implemented')
+        def get_save_file_name():
+            dlg = Gtk.FileChooserDialog('Сохранение статистики в файл', self.window,
+                Gtk.FileChooserAction.SAVE)
+
+            dlg.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_OK, Gtk.ResponseType.OK)
+
+            fdir, fname = os.path.split(self.config.cfgStatSaveFile)
+            dlg.set_current_folder(fdir)
+            dlg.set_current_name(fname)
+
+            for fltname, fltpat in (('Текстовые файлы', '*.txt'), ('Все файлы', '*.*')):
+                fltr = Gtk.FileFilter()
+                fltr.set_name(fltname)
+                fltr.add_pattern(fltpat)
+                dlg.add_filter(fltr)
+
+            r = dlg.run()
+            if r == Gtk.ResponseType.OK:
+                self.config.cfgStatSaveFile = dlg.get_filename()
+
+            dlg.destroy()
+
+            return r == Gtk.ResponseType.OK
+
+        if get_save_file_name():
+            try:
+                #raise ValueError('Boo!')
+                with open(self.config.cfgStatSaveFile, 'w+') as f:
+                    f.write(self.stats.get_stat_table_str())
+            except Exception as ex:
+                message_dialog(self.window, 'Сохранение статистики в файл',
+                               'Не удалось сохранить файл.\n%s' % exception_to_str(ex))
 
     def copy_stat_to_clipboard(self):
-        message_dialog(self.window, APP_TITLE, 'copy_stat_to_clipboard() not yet implemented')
+        try:
+            cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+            cb.clear()
+            cb.set_text(self.stats.get_stat_table_str(), -1)
+            cb.store()
+        except Exception as ex:
+            message_dialog(self.window, 'Копирование статистики в буфер обмена',
+                           'Сбой при операции с буфером обмена - %s' % exception_to_str(ex))
 
     def main(self):
         Gtk.main()
