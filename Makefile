@@ -10,13 +10,14 @@ arcname = $(basename)$(arcx)
 srcarcname = $(basename)-src$(arcx)
 backupdir = ~/shareddocs/pgm/python/
 
-zipapp:
+app:
 	$(pack) -tzip $(ziparcname) $(sources)
 	@echo '#!/usr/bin/env python3' >$(basename)
 	@cat $(ziparcname) >> $(basename)
 	chmod 755 $(basename)
 	rm $(ziparcname)
 distrib:
+	make app
 	$(pack) $(arcname) $(basename) $(resources) $(docs)
 src-archive:
 	$(pack) $(srcarcname) *.py *.svg *. Makefile *.geany $(docs)

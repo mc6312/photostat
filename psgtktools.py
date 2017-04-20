@@ -74,8 +74,9 @@ def load_icon(window=None):
     except GLib.GError:
         print(u'Не удалось загрузить файл изображения "%s"' % resourcePaths.logotype, file=sys.stderr)
 
-        if window is None:
-            return window.render_icon_pixbuf(Gtk.STOCK_ABOUT, Gtk.IconSize.DIALOG)
+        #бред же
+        #if window is None:
+        #    return window.render_icon_pixbuf(Gtk.STOCK_ABOUT, Gtk.IconSize.DIALOG)
 
 
 if __name__ == '__main__':
