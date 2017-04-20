@@ -75,7 +75,7 @@ def load_icon(window=None):
         print(u'Не удалось загрузить файл изображения "%s"' % resourcePaths.logotype, file=sys.stderr)
 
         if window is None:
-            return self.window.render_icon_pixbuf(Gtk.STOCK_ABOUT, Gtk.IconSize.DIALOG)
+            return window.render_icon_pixbuf(Gtk.STOCK_ABOUT, Gtk.IconSize.DIALOG)
 
 
 if __name__ == '__main__':
