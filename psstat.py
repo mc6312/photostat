@@ -26,18 +26,29 @@ GExiv2.log_set_level(GExiv2.LogLevel.MUTE)
 import os, os.path
 from fractions import Fraction
 
-from psconfig import *
+import psconfig
+
+
+# "служебные" значения для ФР и диафрагмы
+# (для сортировки и отображения)
+V_UNKNOWN = -1  # для неизвестных значений ФР и диафрагмы;
+V_OTHERS = 0    # для группировки строк/столбцов, в которых
+                # суммарное значение меньше определенной величины
 
 
 def normalized_aperture(raperture):
     """Преобразует значение raperture (fractions.Fraction)
     в целое число с фиксированной точкой."""
 
-    f = int(raperture.numerator / raperture.denominator * 10)
-    if f < 0:
-        f = 0
+    f = int(round(raperture) * 10)
+    if f <= 0:
+        f = V_UNKNOWN
 
     return f
+
+
+def normalized_focal_length(fl):
+    return V_UNKNOWN if fl <= 0 else fl
 
 
 class ApertureStatistics():
@@ -93,6 +104,17 @@ class FocalLengthStatistics():
 
 
 class PhotoStatistics():
+    """Статистика по использованным фокусным расстояниям и диафрагмам.
+
+    Порядок операций:
+    1. Создание экземпляра класса (или вызов метода clear() существующего
+       экземпляра).
+    2. Вызов метода scan_directory() (или несколько вызовов для разных
+       несовпадающих каталогов.
+    3. Вызов метода get_stat_table() для получения финального результата.
+
+    Также см. описания методов."""
+
     def __init__(self):
         # ключи - фокусные расстояния, значения - экземпляры FocalLengthStatistics
         self.statFocals = {}
@@ -111,7 +133,7 @@ class PhotoStatistics():
         self.statTotalFiles = 0
 
     def clear(self):
-        # сброс статистики (перед повторным сбором)
+        """Сброс статистики (перед повторным сбором)."""
 
         self.statFocals.clear()
         self.statApertures.clear()
@@ -166,8 +188,9 @@ class PhotoStatistics():
 
             if not aperture or float(aperture) < 0.5:
                 # считается, что диафрагмы < 0.7 не бывает, но оставим всё ж запас ради параноищи
-                # если вернуло кривое значение (например, <0), загоняем в рамки скотину
-                aperture = Fraction.from_float(0.0)
+                # если вернуло кривое значение (например, <0)
+                # считаем это "неизвестным значением"
+                aperture = Fraction.from_float(V_UNKNOWN)
 
             # снимки с EXIF, но с нулевыми значениями ФР и диафрагмы могут быть, например,
             # с нечипованных древних объективов
@@ -211,27 +234,100 @@ class PhotoStatistics():
                 if callable(callback) and not callback(self, fpath):
                     return
 
-    def get_stat_table(self):
-        """Возвращает собранную статистику в виде кортежа из двух элементов:
-        1й - список списков с данными статистики (ибо глупый питон не умеет
-             двумерных массивов без дополнительного шаманства);
-        2й - количество столбцов (включая заголовки строк и суммарный);
-             если статистика не набрана - этот элемент равен 0.
+    class StatTable():
+        """Вспомогательный класс для хранения сформированной таблицы
+        статистики.
+        Не является потомком питоньего класса-списка, дабы не рисковать
+        совпадениями имен полей и т.п.
 
-        Столбцы - диафрагмы, строки - фокусные расстояния.
+        Поле rows - список списков с данными статистики (ибо глупый питон
+        не умеет двумерных массивов без дополнительного шаманства).
+        Поле заполняется значениями 'снаружи' - этот класс сам ничего
+        не умеет, кроме преобразования своего содержимого в строку.
+
+        В столбцах - диафрагмы, в строках - фокусные расстояния.
         В ячейках - кол-во снимков для соотв. фокусного и диафрагмы.
         Первый столбец - заголовки строк, первая строка - заголовки столбцов.
         Последний столбец и последняя строка - суммарные значения."""
 
+        COL_SEPARATOR = '  '
+
+        def __init__(self):
+            self.rows = []
+
+        def clear(self):
+            self.rows.clear()
+
+        def get_total_photos(self):
+            return 0 if not self.rows else self.rows[-1][-1]
+
+        def __str__(self):
+            """Форматирование статистики как текста,
+            для сохранения в файл и т.п.
+
+            Если таблица пустая, возвращает пустую строку."""
+
+            print(self.rows)
+
+            ret = []
+
+            if self.rows:
+                colWidths = [0] * len(self.rows[0])
+
+                # преобразуем в строки и меряем ширину
+
+                for row in self.rows:
+                    for colix, col in enumerate(row):
+                        sv = str(col)
+                        svl = len(sv)
+
+                        if svl > colWidths[colix]:
+                            colWidths[colix] = svl
+
+                        row[colix] = sv
+
+                #print(stat)
+                # форматируем
+
+                col0width = colWidths[0]
+                del colWidths[0]
+
+                for row in stat:
+                    srow = COL_SEPARATOR.join(map(lambda c: row[c[0] + 1].rjust(c[1], ' '), enumerate(colWidths)))
+
+                    ret.append('%s%s%s' % (row[0].ljust(col0width, ' '), COL_SEPARATOR, srow))
+
+                ret.append('')
+                ret.append('Всего фотографий: %d' % self.get_total_photos())
+
+            return '\n'.join(ret)
+
+    TABLE_MIN_ROW_THRESHOLD = 2 # порог (в процентах), ниже которого строки таблицы объединяются в строку с заголовком "прочие"
+
+    def get_stat_table(self, reduceRows=True, reduceCols=False):
+        """Получение результата после сбора статистики.
+
+        reduceRows - если True - группировать в строку "прочие" строки,
+                     в которых суммарное кол-во снимков меньше порога;
+        reduceCols - если True - группировать в столбец "прочие" столбцы,
+                     в которых суммарное кол-во снимков меньше порога.
+
+        Возвращает экземпляр класса PhotoStatistics.StatTable.
+
+        Внимание! Этот метод может изменять содержимое полей statApertures
+        и statFocals (см. описание класса)."""
+
         S_TOTAL = 'Всего'
         S_UNK = 'неизв.'
+        S_OTHER = 'прочие'
 
         # нормализованные значения диафрагм - ключи для столбцов
         usedApertures = list(sorted(self.statApertures.keys()))
 
         def disp_ap(nap):
             ap = self.statApertures[nap]
-            return S_UNK if int(ap.value) == 0 else 'f/%s' % ap.display
+
+            return S_UNK if nap == V_UNKNOWN else S_OTHER if nap == V_OTHERS else'f/%s' % ap.display
 
         colHeaders = ['ФР/Д'] + list(map(disp_ap, usedApertures)) + [S_TOTAL]
 
@@ -241,10 +337,25 @@ class PhotoStatistics():
         numCols = len(colHeaders)
         numDataCols = len(usedApertures)
 
-        buf = [colHeaders]
+        table = self.StatTable()
+        table.rows.append([colHeaders])
 
         # имеющиеся значения фокусных расстояний
-        usedFocals = list(sorted(self.statFocals.keys()))
+        allFocals = set(self.statFocals.keys())
+        otherFocals = set() # ФР, процент снимков с которыми <TABLE_MIN_ROW_THRESHOLD
+
+        # фильтруем данные, группируя малозначимые строки
+        if reduceRows:
+            minRowThreshold = int(self.statTotalPhotos * self.TABLE_MIN_ROW_THRESHOLD / 100)
+            for focal in self.statFocals:
+                if self.statFocals[focal].totalPhotos < minRowThreshold:
+                    otherFocals.add(focal)
+
+            if otherFocals:
+                allFocals -= otherFocals
+        #print(otherFocals)
+
+        usedFocals = list(sorted(allFocals))
 
         rowHeaders = list(map(lambda f: S_UNK if f == 0 else '%d мм' % f, usedFocals))
 
@@ -253,7 +364,7 @@ class PhotoStatistics():
 
         # заполняем таблицу значениями
 
-        colSummary = [0] * (numDataCols)
+        rowSummary = [0] * (numDataCols)
 
         for rowix, focal in enumerate(usedFocals):
             row = [rowHeaders[rowix]] + [0] * numDataCols
@@ -266,56 +377,34 @@ class PhotoStatistics():
                     colix = apertureColumns[nap]
                     np = focals.apertures[nap].numPhotos
                     row[colix] = np
-                    colSummary[colix - 1] += np
+                    rowSummary[colix - 1] += np
 
             row.append(focals.totalPhotos)
 
-            buf.append(row)
+            table.rows.append(row)
 
-        buf.append([S_TOTAL] + colSummary + [sum(colSummary)])
+        if otherFocals:
+            rowOthers = [0] * (numDataCols)
 
-        return (buf, numCols)
+            totalOthers = 0
 
+            for rowix, focal in enumerate(otherFocals):
+                focals = self.statFocals[focal]
+                totalOthers += focals.totalPhotos
 
-    def get_stat_table_str(self):
-        """Форматирование статистики как текста,
-        для сохранения в файл и т.п."""
+                for nap in apertureColumns:
+                    if nap in focals.apertures:
+                        colix = apertureColumns[nap] - 1
 
-        ret = []
+                        np = focals.apertures[nap].numPhotos
+                        rowOthers[colix] += np
+                        rowSummary[colix] += np
 
-        if self.statTotalPhotos:
-            stat, ncols = self.get_stat_table()
+            table.rows.append([S_OTHER] + rowOthers + [totalOthers])
 
-            colWidths = [0] * ncols
+        table.rows.append([S_TOTAL] + rowSummary + [sum(rowSummary)])
 
-            # преобразуем в строки и меряем ширину
-
-            for row in stat:
-                for colix, col in enumerate(row):
-                    sv = str(col)
-                    svl = len(sv)
-
-                    if svl > colWidths[colix]:
-                        colWidths[colix] = svl
-
-                    row[colix] = sv
-
-            #print(stat)
-            # форматируем
-
-            S_SEP = '  '
-            col0width = colWidths[0]
-            del colWidths[0]
-
-            for row in stat:
-                srow = S_SEP.join(map(lambda c: row[c[0] + 1].rjust(c[1], ' '), enumerate(colWidths)))
-
-                ret.append('%s%s%s' % (row[0].ljust(col0width, ' '), S_SEP, srow))
-
-        ret.append('')
-        ret.append('Всего фотографий: %d' % self.statTotalPhotos)
-
-        return '\n'.join(ret)
+        return table
 
     def __str__(self):
         buf = ['statFocals:'] + list(map(lambda k: '  %7s: %s' % ('f=%d' % k, str(self.statFocals[k])), sorted(self.statFocals.keys())))
@@ -336,18 +425,18 @@ def __dbg_scan_cbk(statobj, fpath):
 
 
 if __name__ == '__main__':
-    PHOTODIR = '~/photos.current'
-    #PHOTODIR = '~/docs-private/photos'
+    #PHOTODIR = '~/photos.current'
+    PHOTODIR = '~/docs-private/photos/'
 
     stats = PhotoStatistics()
-    e = stats.scan_directory(os.path.expanduser(PHOTODIR), RAW_FILE_EXTS, __dbg_scan_cbk)
+    e = stats.scan_directory(os.path.expanduser(PHOTODIR), psconfig.RAW_FILE_EXTS, __dbg_scan_cbk)
     if e:
         print('Ошибка: %s' % e)
         exit(1)
 
     #print(stats)
 
-    stattab = stats.get_stat_table_str()
+    stattab = stats.get_stat_table(reduceRows=False)
     print(stattab)
     print('Всего файлов: %d' % stats.statTotalFiles)
     #print('\nСтатистика:')

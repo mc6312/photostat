@@ -19,7 +19,7 @@
 
 
 APP_TITLE = 'Сбор статистки параметров фотографий'
-APP_VERSION = u'1.0'
+APP_VERSION = u'1.1'
 APP_COPYRIGHT = u'Copyright 2017 MC-6312'
 
 

@@ -1,7 +1,7 @@
 packer = 7z
 pack = $(packer) a -mx=9
 arcx = .7z
-docs = COPYING README.md
+docs = COPYING README.md Changelog
 resources = photostat.svg
 sources = __main__.py photostat.py psabout.py pscommon.py psconfig.py psgtktools.py psstat.py
 basename = photostat

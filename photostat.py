@@ -267,7 +267,7 @@ class PhotoStatUI():
 
         self.progresspage = Gtk.VBox(spacing=WIDGET_SPACING)
 
-        self.progresstext = Gtk.Label('Сбор nстатистики...')
+        self.progresstext = Gtk.Label('Сбор статистики...')
         self.progresstext.set_halign(0.0)
 
 
