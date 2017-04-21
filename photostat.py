@@ -159,42 +159,46 @@ class PhotoStatUI():
             self.statdisplay.remove_column(self.statdisplay.get_column(0))
 
         #
-        statdata, ncols = self.stats.get_stat_table()
+        stat = self.stats.get_stat_table()
 
-        # создаем и засираем новую таблицу
-        # 1й столбец - заголовок
-        # следующие - пары из строки (для отображения)
-        # и целого (для прогрессбара)
-        coltypes = [GObject.TYPE_STRING] + [GObject.TYPE_STRING, GObject.TYPE_INT] * (ncols - 1)
-        self.stattable = Gtk.ListStore(*coltypes)
+        if stat.rows:
+            # создаем и засираем новую таблицу
+            # 1й столбец - заголовок
+            # следующие - пары из строки (для отображения)
+            # и целого (для прогрессбара)
 
-        self.statdisplay.append_column(Gtk.TreeViewColumn(statdata[0][0], Gtk.CellRendererText(), text=0))
+            lastcol = len(stat.rows[0]) - 1
 
-        crpb = Gtk.CellRendererProgress()
-        for ixcol in range(ncols - 1):
-            dcol = 1 + (ixcol * 2)
-            col = Gtk.TreeViewColumn(statdata[0][ixcol + 1], crpb, text=dcol, value=dcol + 1)
-            col.set_expand(True)
-            self.statdisplay.append_column(col)
+            coltypes = [GObject.TYPE_STRING] + [GObject.TYPE_STRING, GObject.TYPE_INT] * lastcol
+            self.stattable = Gtk.ListStore(*coltypes)
 
-        # заполняем данными
-        for rowix in range(1, len(statdata)):
-            row = statdata[rowix]
+            self.statdisplay.append_column(Gtk.TreeViewColumn(stat.rows[0][0], Gtk.CellRendererText(), text=0))
 
-            strow = [row[0]]
-            for col in row[1:]:
-                # пара значений - строка для отображения
-                strow.append(str(col) if col > 0 else '')
+            crpb = Gtk.CellRendererProgress()
+            for ixcol in range(lastcol):
+                dcol = 1 + (ixcol * 2)
+                col = Gtk.TreeViewColumn(stat.rows[0][ixcol + 1], crpb, text=dcol, value=dcol + 1)
+                col.set_expand(True)
+                self.statdisplay.append_column(col)
 
-                # и значение для прогрессбара
-                p = 0 if self.stats.statTotalPhotos == 0 else col * 100 / self.stats.statTotalPhotos
+            # заполняем данными
+            for rowix in range(1, len(stat.rows)):
+                row = stat.rows[rowix]
 
-                strow.append(p)
+                strow = [row[0]]
+                for col in row[1:]:
+                    # пара значений - строка для отображения
+                    strow.append(str(col) if col > 0 else '')
 
-            self.stattable.append(strow)
+                    # и значение для прогрессбара
+                    p = 0 if self.stats.statTotalPhotos == 0 else col * 100 / self.stats.statTotalPhotos
 
-        #
-        self.statdisplay.set_model(self.stattable)
+                    strow.append(p)
+
+                self.stattable.append(strow)
+
+            #
+            self.statdisplay.set_model(self.stattable)
 
     def __init__(self, config):
         """Создание окна с виджетами.

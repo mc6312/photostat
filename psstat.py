@@ -28,6 +28,8 @@ from fractions import Fraction
 
 import psconfig
 
+from warnings import warn
+
 
 # "служебные" значения для ФР и диафрагмы
 # (для сортировки и отображения)
@@ -258,16 +260,11 @@ class PhotoStatistics():
         def clear(self):
             self.rows.clear()
 
-        def get_total_photos(self):
-            return 0 if not self.rows else self.rows[-1][-1]
-
         def __str__(self):
             """Форматирование статистики как текста,
             для сохранения в файл и т.п.
 
             Если таблица пустая, возвращает пустую строку."""
-
-            print(self.rows)
 
             ret = []
 
@@ -292,19 +289,16 @@ class PhotoStatistics():
                 col0width = colWidths[0]
                 del colWidths[0]
 
-                for row in stat:
-                    srow = COL_SEPARATOR.join(map(lambda c: row[c[0] + 1].rjust(c[1], ' '), enumerate(colWidths)))
+                for row in self.rows:
+                    srow = self.COL_SEPARATOR.join(map(lambda c: row[c[0] + 1].rjust(c[1], ' '), enumerate(colWidths)))
 
-                    ret.append('%s%s%s' % (row[0].ljust(col0width, ' '), COL_SEPARATOR, srow))
-
-                ret.append('')
-                ret.append('Всего фотографий: %d' % self.get_total_photos())
+                    ret.append('%s%s%s' % (row[0].ljust(col0width, ' '), self.COL_SEPARATOR, srow))
 
             return '\n'.join(ret)
 
     TABLE_MIN_ROW_THRESHOLD = 2 # порог (в процентах), ниже которого строки таблицы объединяются в строку с заголовком "прочие"
 
-    def get_stat_table(self, reduceRows=True, reduceCols=False):
+    def get_stat_table(self, reduceRows=True, reduceCols=True):
         """Получение результата после сбора статистики.
 
         reduceRows - если True - группировать в строку "прочие" строки,
@@ -312,24 +306,39 @@ class PhotoStatistics():
         reduceCols - если True - группировать в столбец "прочие" столбцы,
                      в которых суммарное кол-во снимков меньше порога.
 
-        Возвращает экземпляр класса PhotoStatistics.StatTable.
-
-        Внимание! Этот метод может изменять содержимое полей statApertures
-        и statFocals (см. описание класса)."""
+        Возвращает экземпляр класса PhotoStatistics.StatTable."""
 
         S_TOTAL = 'Всего'
         S_UNK = 'неизв.'
         S_OTHER = 'прочие'
 
+        tableMinThreshold = int(self.statTotalPhotos * self.TABLE_MIN_ROW_THRESHOLD / 100)
+
+        #
+        # значения диафрагмы - столбцы
+        #
+
         # нормализованные значения диафрагм - ключи для столбцов
-        usedApertures = list(sorted(self.statApertures.keys()))
+        allApertures = set(self.statApertures.keys())
+        otherApertures = set()
+
+        # фильтруем данные, группируя малозначимые столбцы
+        if reduceCols:
+            #!!!
+            warn('%s.get_stat_table(): группировка столбцов не реализована!' % self.__class__.__name__)
+
+            if otherApertures:
+                allApertures -= otherApertures
+
+        usedApertures = list(sorted(allApertures))
 
         def disp_ap(nap):
             ap = self.statApertures[nap]
 
             return S_UNK if nap == V_UNKNOWN else S_OTHER if nap == V_OTHERS else'f/%s' % ap.display
 
-        colHeaders = ['ФР/Д'] + list(map(disp_ap, usedApertures)) + [S_TOTAL]
+        colHeaders = ['ФР/Д'] + list(map(disp_ap, usedApertures))
+        colHeaders += [S_TOTAL]
 
         # соответствие "диафрагма - столбец", с учетом столбца - заголовка строк
         apertureColumns = dict(map(lambda t: (t[1], t[0] + 1), enumerate(usedApertures)))
@@ -338,7 +347,11 @@ class PhotoStatistics():
         numDataCols = len(usedApertures)
 
         table = self.StatTable()
-        table.rows.append([colHeaders])
+        table.rows.append(colHeaders)
+
+        #
+        # фокусные расстояния - строки
+        #
 
         # имеющиеся значения фокусных расстояний
         allFocals = set(self.statFocals.keys())
@@ -346,9 +359,8 @@ class PhotoStatistics():
 
         # фильтруем данные, группируя малозначимые строки
         if reduceRows:
-            minRowThreshold = int(self.statTotalPhotos * self.TABLE_MIN_ROW_THRESHOLD / 100)
             for focal in self.statFocals:
-                if self.statFocals[focal].totalPhotos < minRowThreshold:
+                if self.statFocals[focal].totalPhotos < tableMinThreshold:
                     otherFocals.add(focal)
 
             if otherFocals:
@@ -436,8 +448,8 @@ if __name__ == '__main__':
 
     #print(stats)
 
-    stattab = stats.get_stat_table(reduceRows=False)
+    stattab = stats.get_stat_table()#reduceRows=False)
     print(stattab)
-    print('Всего файлов: %d' % stats.statTotalFiles)
+    print('\nВсего файлов: %d' % stats.statTotalFiles)
     #print('\nСтатистика:')
     #print(stats.format_statistics_str())
