@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 
 
-""" This file is part of PhotoStat.
+""" pstat_config.py
+
+    This file is part of PhotoStat.
 
     PhotoStat is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,17 +27,18 @@ import sys
 from collections import namedtuple
 
 
-from pscommon import *
+from pstat_common import *
 
 
 # список расширений файлов
 IMAGE_FILE_EXTS = set(['jpg', 'jpeg', 'tif', 'tiff', 'png'])
-RAW_FILE_EXTS   = set(['dng', '3fr', 'arw', 'srf', 'sr2',
-                       'bay', 'crw',
-                       'cr2', 'dcr', 'kdc', 'erf', 'mef',
-                       'mrw', 'nef', 'nrw', 'orf', 'raf',
-                       'raw', 'rwl', 'rw2', 'r3d', 'ptx',
-                       'pef', 'srw', 'x3f'])
+RAW_FILE_EXTS   = set(('3fr', 'ari', 'arw', 'srf', 'sr2',
+    'bay', 'braw', 'cri', 'crw', 'cr2', 'cr3', 'cap', 'iiq',
+    'eip', 'dcs', 'dcr', 'drf', 'k25', 'kdc', 'dng', 'erf',
+    'fff', 'gpr', 'mef', 'mdc', 'mos', 'mrw', 'nef', 'nrw', 'orf', 'pef', 'ptx', 'pxn',
+   'r3d', 'raf', 'raw', 'rw2', 'rwl', 'rwz', 'srw', 'x3f'))
+
+
 
 
 class Configuration():

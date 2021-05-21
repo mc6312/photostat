@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" This file is part of PhotoStat.
+""" pstat_stat.py
+
+    This file is part of PhotoStat.
 
     PhotoStat is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,7 +28,7 @@ GExiv2.log_set_level(GExiv2.LogLevel.MUTE)
 import os, os.path
 from fractions import Fraction
 
-import psconfig
+import pstat_config
 
 from warnings import warn
 
@@ -437,6 +439,8 @@ def __dbg_scan_cbk(statobj, fpath):
 
 
 if __name__ == '__main__':
+    print('[debugging %s]' % __file__)
+
     #PHOTODIR = '~/photos.current'
     PHOTODIR = '~/docs-private/photos/'
 

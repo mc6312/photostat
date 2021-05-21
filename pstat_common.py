@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 
 
-""" This file is part of PhotoStat.
+""" pstat_common.py
+
+    This file is part of PhotoStat.
 
     PhotoStat is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,9 +20,13 @@
     along with PhotoStat.  If not, see <http://www.gnu.org/licenses/>."""
 
 
+from traceback import print_exception
+
+
 APP_TITLE = 'Сбор статистки параметров фотографий'
-APP_VERSION = u'1.1'
-APP_COPYRIGHT = u'Copyright 2017 MC-6312'
+APP_VERSION = '1.2'
+APP_COPYRIGHT = 'Copyright 2017-2021 MC-6312'
+APP_TITLE_VERSION = '%s v%s' % (APP_TITLE, APP_VERSION)
 
 
 def exception_to_str(ex):
@@ -29,3 +35,11 @@ def exception_to_str(ex):
         exs = ex.__class__.__name__
 
     return exs
+
+
+def dump_exception(enfo=None):
+    if enfo is None:
+        enfo = sys.exc_info()
+
+    print_exception(*enfo, file=sys.stderr)
+
