@@ -126,6 +126,8 @@ class PhotoStatUI():
             self.faSummary.view.append_column(Gtk.TreeViewColumn(stat.rows[0][0], Gtk.CellRendererText(), text=0))
 
             crpb = Gtk.CellRendererProgress()
+            crpb.set_property('text-xalign', 0.0)
+
             for ixcol in range(lastcol):
                 dcol = 1 + (ixcol * 2)
                 col = Gtk.TreeViewColumn(stat.rows[0][ixcol + 1], crpb, text=dcol, value=dcol + 1)
