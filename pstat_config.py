@@ -31,14 +31,13 @@ from pstat_common import *
 
 
 # список расширений файлов
-IMAGE_FILE_EXTS = set(['jpg', 'jpeg', 'tif', 'tiff', 'png'])
+IMAGE_FILE_EXTS = set(('jpg', 'jpeg', 'tif', 'tiff', 'png'))
 RAW_FILE_EXTS   = set(('3fr', 'ari', 'arw', 'srf', 'sr2',
     'bay', 'braw', 'cri', 'crw', 'cr2', 'cr3', 'cap', 'iiq',
     'eip', 'dcs', 'dcr', 'drf', 'k25', 'kdc', 'dng', 'erf',
-    'fff', 'gpr', 'mef', 'mdc', 'mos', 'mrw', 'nef', 'nrw', 'orf', 'pef', 'ptx', 'pxn',
-   'r3d', 'raf', 'raw', 'rw2', 'rwl', 'rwz', 'srw', 'x3f'))
-
-
+    'fff', 'gpr', 'mef', 'mdc', 'mos', 'mrw', 'nef', 'nrw',
+    'orf', 'pef', 'ptx', 'pxn', 'r3d', 'raf', 'raw', 'rw2',
+    'rwl', 'rwz', 'srw', 'x3f'))
 
 
 class Configuration():

@@ -17,29 +17,27 @@
     along with PhotoStat.  If not, see <http://www.gnu.org/licenses/>."""
 
 
-from gi.repository import Gtk
-#from gi.repository.GdkPixbuf import Pixbuf
-
-#import os.path
-
+from gtktools import *
 from gi.repository import Gtk, GObject, Pango
 
-from pscommon import *
-from psconfig import *
-from psgtktools import *
+from pstat_common import *
+from pstat_config import *
 
 
 class AboutDialog():
     def __init__(self, parentwnd):
+        resldr = get_resource_loader()
+
         self.dlgabout = Gtk.AboutDialog(parent=parentwnd)
 
-        self.dlgabout.set_size_request(-1, 400)
         self.dlgabout.set_copyright(APP_COPYRIGHT)
         self.dlgabout.set_version('v%s' % APP_VERSION)
         self.dlgabout.set_program_name(APP_TITLE)
 
         # загрузка ресурсов
-        icon = load_icon()
+        iconsize = WIDGET_BASE_WIDTH * 24
+
+        icon = resldr.load_pixbuf('photostat.svg', iconsize, iconsize)
         if icon:
             self.dlgabout.set_logo(icon)
 
@@ -54,10 +52,11 @@ class AboutDialog():
             slicense = None
 
         self.dlgabout.set_license_type(Gtk.License.GPL_3_0_ONLY)
-        self.dlgabout.set_license(slicense if slicense else u'Файл с текстом GPL не найден.\nИщите на http://www.fsf.org/')
+        self.dlgabout.set_license(slicense if slicense else 'Файл с текстом GPL не найден.\nИщите на http://www.fsf.org/')
 
-        self.dlgabout.add_credit_section(u'Сляпано во славу', [u'Азатота', u'Йог-Сотота', u'Ктулху', u'Шаб-Ниггурат', u'и прочей кодлы Великих Древних'])
-        self.dlgabout.add_credit_section(u'Особая благодарность', [u'Левой ноге автора'])
+        self.dlgabout.add_credit_section('Сляпано во славу',
+            ['Азатота', 'Йог-Сотота', 'Ктулху', 'Шаб-Ниггурат', 'и прочей кодлы Великих Древних'])
+        self.dlgabout.add_credit_section('Особая благодарность', ['Левой ноге автора'])
 
     def run(self):
         self.dlgabout.show_all()
@@ -65,10 +64,7 @@ class AboutDialog():
         self.dlgabout.hide()
 
 
-def __main():
-    AboutDialog(None).run()
-    return 0
-
-
 if __name__ == '__main__':
-    exit(__main())
+    print('[debugging %s]' % __file__)
+
+    AboutDialog(None).run()

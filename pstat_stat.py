@@ -434,7 +434,7 @@ class PhotoStatistics():
 
 
 def __dbg_scan_cbk(statobj, fpath):
-    #print(fpath)
+    print(fpath)
     return True
 
 
@@ -445,7 +445,7 @@ if __name__ == '__main__':
     PHOTODIR = '~/docs-private/photos/'
 
     stats = PhotoStatistics()
-    e = stats.scan_directory(os.path.expanduser(PHOTODIR), psconfig.RAW_FILE_EXTS, __dbg_scan_cbk)
+    e = stats.scan_directory(os.path.expanduser(PHOTODIR), pstat_config.RAW_FILE_EXTS, __dbg_scan_cbk)
     if e:
         print('Ошибка: %s' % e)
         exit(1)

@@ -35,76 +35,33 @@ from pstat_about import *
 
 class PhotoStatUI():
     PAGES_COUNT = 3
-    PAGE_PICDIR, PAGE_PROGRESS, PAGE_STAT = range(PAGES_COUNT)
-    PAGE_LAST = PAGE_STAT
+    PAGE_START, PAGE_PROGRESS, PAGE_RESULT = range(PAGES_COUNT)
+    PAGE_LAST = PAGE_RESULT
 
     PROGRESS_DELAY = 1000 # дергаем прогрессбаром только через PROGRESS_DELAY файлов
 
-    def destroy(self, widget, data=None):
+    def wnd_destroy(self, widget, data=None):
         Gtk.main_quit()
-
-    def __task_events(self):
-        # даем прочихаться междумордию
-        while Gtk.events_pending():
-            Gtk.main_iteration()#False)
-
-    def check_picdirpage_content(self):
-        """Проверка правильности заполнения полей
-        страницы выбора каталога и типов файлов."""
-
-        self.nextbtn.set_sensitive(self.config.check_fields())
-
-    def pictyperawcb_toggled(self, cbtn, data=None):
-        self.config.cfgScanRAWfiles = cbtn.get_active()
-        self.check_picdirpage_content()
-
-    def pictypeimgcb_toggled(self, cbtn, data=None):
-        self.config.cfgScanImageFiles = cbtn.get_active()
-        self.check_picdirpage_content()
-
-    def picdirentry_changed(self, entry, data=None):
-        self.config.cfgPhotoRootDir = self.picdirentry.get_text().strip()
-
-        self.check_picdirpage_content()
-
-    def choose_pic_dir(self):
-        """Выбор каталога с фотографиями через стандартный диалог"""
-
-        dlg = Gtk.FileChooserDialog('Выбор каталога', self.window,
-            Gtk.FileChooserAction.SELECT_FOLDER)
-
-        dlg.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OK, Gtk.ResponseType.OK)
-
-        dlg.set_current_folder(self.config.cfgPhotoRootDir)
-
-        r = dlg.run()
-
-        if r == Gtk.ResponseType.OK:
-            self.picdirentry.set_text(dlg.get_current_folder())
-
-        dlg.destroy()
 
     def scan_progress(self, stats, fpath):
         self.progressDelay -= 1
         if self.progressDelay <= 0:
             self.progressDelay = self.PROGRESS_DELAY
 
-            self.progressbar.pulse()
+            self.progressBar.pulse()
 
             #print(stats.statTotalFiles, stats.statTotalPhotos)
-            #self.progresstext.set_text('Просмотрено файлов: %d\nИз них учтено: %d' % (stats.statTotalFiles, stats.statTotalPhotos))
+            self.txtProgress.set_text('Просмотрено файлов: %d\nИз них учтено: %d' % (stats.statTotalFiles, stats.statTotalPhotos))
 
-        self.__task_events()
+        flush_gtk_events()
 
         return not self.stopScanning
 
     def scan_photos(self):
-        self.ctlhbox.set_sensitive(False)
         try:
             self.stopScanning = False
             self.progressDelay = self.PROGRESS_DELAY
-            self.progressbar.set_sensitive(True)
+            #self.progressBar.set_sensitive(True)
             # иначе не будет обновляться - при активной странице прогресса всё окно not sensitive!
 
             self.stats.clear()
@@ -119,23 +76,23 @@ class PhotoStatUI():
 
             e = self.stats.scan_directory(self.config.cfgPhotoRootDir, ftypes, self.scan_progress)
             if e:
-                message_dialog(self.window, APP_TITLE, e, Gtk.MessageType.ERROR)
+                msg_dialog(self.window, APP_TITLE, e)
 
         finally:
-            self.ctlhbox.set_sensitive(True)
             self.update_stats_view()
-            self.select_next_page() # ибо нефиг после обхода каталогов на этой странице оставаться
+            self.select_next_page(False) # ибо нефиг после обхода каталогов на этой странице оставаться
 
-    def stop_scanning(self, w, data=None):
+    def stop_scanning(self):
         self.stopScanning = True
+        self.pages.set_current_page(self.PAGE_START)
 
-    def select_next_page(self):
-        page = self.pages.get_current_page() + 1
-
-        if page == self.PAGES_COUNT:
-            page = 0
-
-        self.nextbtn.set_label('Продолжить' if page < self.PAGE_LAST else 'Начать сначала')
+    def select_next_page(self, byButton):
+        if byButton:
+            page = self.PAGE_PROGRESS if self.curPage == self.PAGE_START else self.PAGE_START
+        else:
+            page = self.curPage + 1
+            if page == self.PAGES_COUNT:
+                page = self.PAGE_START
 
         self.pages.set_current_page(page)
 
@@ -144,13 +101,12 @@ class PhotoStatUI():
 
     def update_stats_view(self):
         # чистим отображало от старых настроек и значений
-        self.statdisplay.set_model(None)
+        self.faSummary.refresh_begin()
+        # т.к. ниже будем создавать новый экземпляр Gtk.ListStore
+        self.faSummary.store = None
 
-        if self.stattable is not None:
-            self.stattable = None
-
-        while self.statdisplay.get_n_columns() > 0:
-            self.statdisplay.remove_column(self.statdisplay.get_column(0))
+        while self.faSummary.view.get_n_columns() > 0:
+            self.faSummary.view.remove_column(self.faSummary.view.get_column(0))
 
         #
         stat = self.stats.get_stat_table()
@@ -164,16 +120,17 @@ class PhotoStatUI():
             lastcol = len(stat.rows[0]) - 1
 
             coltypes = [GObject.TYPE_STRING] + [GObject.TYPE_STRING, GObject.TYPE_INT] * lastcol
-            self.stattable = Gtk.ListStore(*coltypes)
 
-            self.statdisplay.append_column(Gtk.TreeViewColumn(stat.rows[0][0], Gtk.CellRendererText(), text=0))
+            self.faSummary.store = Gtk.ListStore(*coltypes)
+
+            self.faSummary.view.append_column(Gtk.TreeViewColumn(stat.rows[0][0], Gtk.CellRendererText(), text=0))
 
             crpb = Gtk.CellRendererProgress()
             for ixcol in range(lastcol):
                 dcol = 1 + (ixcol * 2)
                 col = Gtk.TreeViewColumn(stat.rows[0][ixcol + 1], crpb, text=dcol, value=dcol + 1)
                 col.set_expand(True)
-                self.statdisplay.append_column(col)
+                self.faSummary.view.append_column(col)
 
             # заполняем данными
             for rowix in range(1, len(stat.rows)):
@@ -189,165 +146,129 @@ class PhotoStatUI():
 
                     strow.append(p)
 
-                self.stattable.append(strow)
+                self.faSummary.store.append(strow)
 
             #
-            self.statdisplay.set_model(self.stattable)
+            self.faSummary.refresh_end()
 
     def __init__(self, config):
         """Создание окна с виджетами.
         config - экземпляр Configuration."""
+
+        resldr = get_resource_loader()
+        uibldr = resldr.load_gtk_builder('photostat.ui')
 
         self.config = config
         self.stopScanning = False
         self.progressDelay = self.PROGRESS_DELAY
         self.stats = PhotoStatistics()
 
-        self.window = Gtk.Window()
-        self.window.connect('destroy', self.destroy)
+        self.window, hdrbar = get_ui_widgets(uibldr,
+            'wndMain', 'hdrBar')
 
-        self.window.set_title(APP_TITLE)
-        load_icon(self.window)
+        self.window.set_size_request(WIDGET_BASE_WIDTH * 64, WIDGET_BASE_HEIGHT * 25)
 
-        self.window.set_border_width(WIDGET_SPACING)
-        self.window.set_size_request(800, 600)
+        hdrbar.set_title(APP_TITLE)
+        hdrbar.set_subtitle('v%s' % APP_VERSION)
 
-        rootvbox = Gtk.VBox(spacing=WIDGET_SPACING)
-        self.window.add(rootvbox)
+        self.window.set_icon(resldr.load_pixbuf_icon_size('photostat.svg', Gtk.IconSize.DIALOG))
 
-        self.pages = Gtk.Notebook()
-        # делаем страницы визарда вручную - потому что Gtk.Assistant попросту уёбищен
-        rootvbox.pack_start(self.pages, True, True, 0)
+        # делаем страницы визарда наполовину вручную - потому что Gtk.Assistant попросту уёбищен
+        self.pages = uibldr.get_object('pages')
 
-        self.pages.set_show_tabs(False)
-        self.pages.set_show_border(False)
+        #
+        # кнопки
+        #
+        self.btnNextPage, self.btnResultCopy, self.btnResultSave = get_ui_widgets(uibldr,
+            'btnNextPage', 'btnResultCopy', 'btnResultSave')
+
+        self.imgStart = Gtk.Image.new_from_icon_name('system-run-symbolic', Gtk.IconSize.BUTTON)
+        self.imgStop = Gtk.Image.new_from_icon_name('media-playback-stop-symbolic', Gtk.IconSize.BUTTON)
+        self.imgHome = Gtk.Image.new_from_icon_name('go-home-symbolic', Gtk.IconSize.BUTTON)
 
         #
         # Страница 1: выбор каталога и типов файлов
         #
 
-        self.picdirpage = Gtk.VBox(spacing=WIDGET_SPACING)
-
-        # выбор каталога
-        picdirfr, picdirbox = frame_with_box('Каталог с фотографиями:', Gtk.HBox)
-
-        self.picdirpage.pack_start(picdirfr, False, False, 0)
-
-        #print(self.config)
-
-        self.picdirentry = Gtk.Entry()
-        self.picdirentry.set_text(self.config.cfgPhotoRootDir)
-        self.picdirentry.connect('changed', self.picdirentry_changed)
-        picdirbox.pack_start(self.picdirentry, True, True, 0)
-
-        picdirbtn = Gtk.Button('Выбрать')
-        picdirbtn.connect('clicked', lambda b: self.choose_pic_dir())
-        picdirbox.pack_end(picdirbtn, False, False, 0)
-
-        # выбор типа файлов
-        pictypefr, pictypebox = frame_with_box('Типы файлов')
-        self.picdirpage.pack_start(pictypefr, False, False, 0)
-
-        for btitle, bstate, btoggled in (('RAW', self.config.cfgScanRAWfiles, self.pictyperawcb_toggled),
-            ('JPEG, PNG, TIFF', self.config.cfgScanImageFiles, self.pictypeimgcb_toggled)):
-
-            checkbtn = Gtk.CheckButton.new_with_label(btitle)
-            checkbtn.set_active(bstate)
-            checkbtn.connect('toggled', btoggled)
-
-            pictypebox.pack_start(checkbtn, False, False, 0)
-
-        self.pages.append_page(self.picdirpage)
+        self.fcbtnPicDir = uibldr.get_object('fcbtnPicDir')
+        self.fcbtnPicDir.select_filename(self.config.cfgPhotoRootDir)
 
         #
         # Страница 2: сбор статистики
         #
 
-        self.progresspage = Gtk.VBox(spacing=WIDGET_SPACING)
-
-        self.progresstext = Gtk.Label('Сбор статистики...')
-        self.progresstext.set_halign(0.0)
-
-
-        self.progresspage.pack_start(self.progresstext, True, True, 0)
-
-        pbhbox = Gtk.HBox(spacing=WIDGET_SPACING)
-        self.progresspage.pack_end(pbhbox, False, False, 0)
-
-        self.progressbar = Gtk.ProgressBar()
-        #self.progressbar.set_show_text(True)
-        pbhbox.pack_start(self.progressbar, True, True, 0)
-
-        self.progressstopbtn = Gtk.Button('Прервать')
-        self.progressstopbtn.connect('clicked', self.stop_scanning)
-        pbhbox.pack_end(self.progressstopbtn, False, False, 0)
-
-        self.pages.append_page(self.progresspage)
+        self.txtProgress, self.progressBar = get_ui_widgets(uibldr,
+            'txtProgress', 'progressBar')
 
         #
         # Страница 3: отображение статистики
         #
 
-        self.statdisppage = Gtk.VBox(spacing=WIDGET_SPACING)
-
-        sdfr, sdbox = frame_with_box('Статистика')
-        self.statdisppage.pack_start(sdfr, True, True, 0)
-
-        # сюда вкрачить Gtk.TreeView
-        self.stattable = None # ибо кол-во столбцов зависит от собранной статистики
-        self.statdisplay = Gtk.TreeView()
-
-        sdscwindow = Gtk.ScrolledWindow()
-        sdscwindow.set_shadow_type(Gtk.ShadowType.IN)
-        sdscwindow.add(self.statdisplay)
-
-        sdbox.pack_start(sdscwindow, True, True, 0)
+        self.faSummary = TreeViewShell.new_from_uibuilder(uibldr, 'tvFASummary')
 
         # сохранение статистики
 
-        sdsavebox = Gtk.HBox(spacing=WIDGET_SPACING)
-        self.statdisppage.pack_end(sdsavebox, False, False, 0)
-
-        sdsavefilebtn = Gtk.Button('Сохранить в файл')
-        sdsavefilebtn.connect('clicked', lambda b: self.save_stat_to_file())
-        sdsavebox.pack_start(sdsavefilebtn, False, False, 0)
-
-        sdcopytocbbtn = Gtk.Button('Скопировать в буфер обмена')
-        sdcopytocbbtn.connect('clicked', lambda b: self.copy_stat_to_clipboard())
-        sdsavebox.pack_start(sdcopytocbbtn, False, False, 0)
-
-        self.pages.append_page(self.statdisppage)
-
-        #
-        # управление
-        #
-
-        rootvbox.pack_start(Gtk.HSeparator(), False, False, 0)
-
-        self.ctlhbox = Gtk.HBox(spacing=WIDGET_SPACING)
-        rootvbox.pack_end(self.ctlhbox, False, False, 0)
-
-        self.nextbtn = Gtk.Button('Продолжить')
-        self.nextbtn.set_can_default(True   )
-        self.nextbtn.connect('clicked', lambda b: self.select_next_page())
-        self.ctlhbox.pack_start(self.nextbtn, False, False, 0)
-
-        exitbtn = Gtk.Button('Выход')
-        exitbtn.connect('clicked', self.destroy)
-        self.ctlhbox.pack_end(exitbtn, False, False, 0)
-
-        aboutbtn = Gtk.Button('О программе')
-        aboutbtn.connect('clicked', lambda b: AboutDialog(self.window).run())
-        self.ctlhbox.pack_end(aboutbtn, False, False, 0)
-
         #
         #
         #
+        self.curPage = self.PAGE_START
+        self.pages.set_current_page(self.curPage)
 
-        self.pages.set_current_page(self.PAGE_PICDIR)
         self.window.show_all()
 
-        self.check_picdirpage_content() # ибо какие-то параметры уже указаны
+        self.setup_sensitive_widgets()
+
+        uibldr.connect_signals(self)
+
+    def btnAbout_clicked(self, btn):
+        AboutDialog(self.window).run()
+
+    def btnStart_clicked(self, btn):
+        self.select_next_page(True)
+
+    def btnResultCopy_clicked(self, btn):
+        self.copy_stat_to_clipboard()
+
+    def btnResultSave_clicked(self, btn):
+        self.save_stat_to_file()
+
+    def pages_switch_page(self, nb, page, pagenum):
+        self.curPage = pagenum
+        self.setup_sensitive_widgets()
+
+    def fcbtnPicDir_selection_changed(self, fc):
+        # выбран корневой каталог фотопомойки
+        self.config.cfgPhotoRootDir = self.fcbtnPicDir.get_filename()
+        self.setup_sensitive_widgets()
+
+    def setup_sensitive_widgets(self):
+        cadd = 'suggested-action'
+        cremove = 'destructive-action'
+
+        if self.curPage == self.PAGE_START:
+            bStart = bool(self.config.cfgPhotoRootDir)
+            bSave = False
+            img = self.imgStart
+        elif self.curPage == self.PAGE_PROGRESS:
+            bStart = True
+            bSave = False
+            img = self.imgStop
+            cadd, cremove = cremove, cadd
+        else:
+            # self.PAGE_RESULT
+            bStart = True
+            bSave = True
+            img = self.imgHome
+
+        self.btnNextPage.set_sensitive(bStart)
+        self.btnNextPage.set_image(img)
+
+        sc = self.btnNextPage.get_style_context()
+        sc.remove_class(cremove)
+        sc.add_class(cadd)
+
+        self.btnResultCopy.set_sensitive(bSave)
+        self.btnResultSave.set_sensitive(bSave)
 
     def save_stat_to_file(self):
         def get_save_file_name():
@@ -379,19 +300,19 @@ class PhotoStatUI():
             try:
                 #raise ValueError('Boo!')
                 with open(self.config.cfgStatSaveFile, 'w+') as f:
-                    f.write(self.stats.get_stat_table_str())
+                    f.write(str(self.stats.get_stat_table()))
             except Exception as ex:
-                message_dialog(self.window, 'Сохранение статистики в файл',
+                msg_dialog(self.window, 'Сохранение статистики в файл',
                                'Не удалось сохранить файл.\n%s' % exception_to_str(ex))
 
     def copy_stat_to_clipboard(self):
         try:
             cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
             cb.clear()
-            cb.set_text(self.stats.get_stat_table_str(), -1)
+            cb.set_text(str(self.stats.get_stat_table()), -1)
             cb.store()
         except Exception as ex:
-            message_dialog(self.window, 'Копирование статистики в буфер обмена',
+            msg_dialog(self.window, 'Копирование статистики в буфер обмена',
                            'Сбой при операции с буфером обмена - %s' % exception_to_str(ex))
 
     def main(self):
@@ -402,7 +323,7 @@ def save_load_settings(config, save):
     e = config.save() if save else config.load()
 
     if e:
-        message_dialog(None, '%s - %s настроек' % (APP_TITLE, 'сохранение' if save else'загрузка'),
+        msg_dialog(None, '%s - %s настроек' % (APP_TITLE, 'сохранение' if save else'загрузка'),
                        e, Gtk.MessageType.ERROR)
         return False
 
