@@ -145,97 +145,123 @@ class PhotoStatistics():
         self.statKnownFocals = 0
         self.statTotalFiles = 0
 
-    def scan_directory(self, rootdir, ftypes, callback=None):
-        """Ковыряем каталог rootdir на предмет корпстинок и сбора статистики.
-        Возвращает None или пустую строку в случае успеха,
-        строку с сообщением об ошибке в случае ошибки.
+    def __process_file_metadata(self, fpath):
+        """Извлечение метаданных из файла фотографии и учёт их в статистике."""
 
-        ftypes - множество (set) допустимых расширений имен файлов
+        try:
+            gmd = GExiv2.Metadata(fpath)
 
-        callback - функция или метод класса, получает два параметра:
-            экземпляр класса PhotoStatistics (т.е. self),
-            полный путь файла;
-        возвращает булевское значение:
-            True - перейти к следующему файлу,
-            False - прервать работу."""
+        except Exception as ex:
+            # файлы, которые не содержат EXIF или не открываются
+            # выгребалкой по любой другой причине - фотками не считаются.
+            # подробности мну в данный момент не колышут.
+            #print(ex)
+            return
 
-        def __scan_file(fpath):
-            self.statTotalFiles += 1
+        if not gmd.has_exif():
+            # такие товарищи нам совсем не товарищи
+            return
 
-            fext = os.path.splitext(fname)[1].lower()
-            if fext:
-                fext = fext[1:] # ибо точку нам не надо
+        focal = int(round(gmd.get_focal_length()))
+        # дробные значения ФР нам нафиг не нужны
 
-            if fext not in ftypes:
-                return
+        aperture = gmd.get_exif_tag_rational('Exif.Photo.FNumber')
+        if not aperture:
+            aperture = gmd.get_exif_tag_rational('Exif.Image.FNumber')
 
-            try:
-                gmd = GExiv2.Metadata(fpath)
+        if not aperture or float(aperture) < 0.5:
+            # считается, что диафрагмы < 0.7 не бывает, но оставим всё ж запас ради параноищи
+            # если вернуло кривое значение (например, <0)
+            # считаем это "неизвестным значением"
+            aperture = Fraction.from_float(V_UNKNOWN)
 
-            except Exception as ex:
-                # файлы, которые не содержат EXIF или не открываются
-                # выгребалкой по любой другой причине - фотками не считаются.
-                # подробности мну в данный момент не колышут.
-                #print(ex)
-                return
+        # снимки с EXIF, но с нулевыми значениями ФР и диафрагмы могут быть, например,
+        # с нечипованных древних объективов
 
-            if not gmd.has_exif():
-                # такие товарищи нам совсем не товарищи
-                return
+        # валим в статистику
+        if focal in self.statFocals:
+            focobj = self.statFocals[focal]
+        else:
+            focobj = FocalLengthStatistics(focal)
+            self.statFocals[focal] = focobj
 
-            focal = int(round(gmd.get_focal_length()))
-            # дробные значения ФР нам нафиг не нужны
+        naperture = focobj.add_photo(aperture)
 
-            aperture = gmd.get_exif_tag_rational('Exif.Photo.FNumber')
-            if not aperture:
-                aperture = gmd.get_exif_tag_rational('Exif.Image.FNumber')
+        if naperture in self.statApertures:
+            aobj = self.statApertures[naperture]
+        else:
+            aobj = ApertureStatistics(aperture)
+            self.statApertures[naperture] = aobj
 
-            if not aperture or float(aperture) < 0.5:
-                # считается, что диафрагмы < 0.7 не бывает, но оставим всё ж запас ради параноищи
-                # если вернуло кривое значение (например, <0)
-                # считаем это "неизвестным значением"
-                aperture = Fraction.from_float(V_UNKNOWN)
+        aobj.numPhotos += 1
 
-            # снимки с EXIF, но с нулевыми значениями ФР и диафрагмы могут быть, например,
-            # с нечипованных древних объективов
+        self.statKnownFocals += 1
 
-            # валим в статистику
-            if focal in self.statFocals:
-                focobj = self.statFocals[focal]
-            else:
-                focobj = FocalLengthStatistics(focal)
-                self.statFocals[focal] = focobj
+        #f35 = gmd.get_tag_long('Exif.Photo.FocalLengthIn35mmFilm')
+        #f35 = gmd.get_tag_interpreted_string('Exif.Photo.FocalLengthIn35mmFilm')
+        #print('%s ЭФР: %s' % (imgfilename, f35))
 
-            naperture = focobj.add_photo(aperture)
+        self.statTotalPhotos += 1
 
-            if naperture in self.statApertures:
-                aobj = self.statApertures[naperture]
-            else:
-                aobj = ApertureStatistics(aperture)
-                self.statApertures[naperture] = aobj
+    def gather_photo_statistics(self, photodir, ftypes, progress=None):
+        """Поиск файлов фотографий и учёт их метаданных.
 
-            aobj.numPhotos += 1
+        Параметры:
+            photodir    - строка с путём к каталогу с фотографиями;
+            ftypes      - множество (set) допустимых расширений имен файлов
+            progress    - функция или метод класса, получает следующие параметры:
+                          1: экземпляр класса PhotoStatistics (т.е. self),
+                          2: float - значение прогресса;
+                              при значении < 0 прогрессбар отображается
+                              в режиме "пульсации";
+                          3: строка с сообщением (м.б. пустой).
+                          Функция должна возвращать булевское значение:
+                            True - перейти к следующему файлу,
+                            False - прервать работу.
 
-            self.statKnownFocals += 1
+        Возвращает пустую строку или None при отсутствии ошибок,
+        иначе - строку с сообщением об ошибке."""
 
-            #f35 = gmd.get_tag_long('Exif.Photo.FocalLengthIn35mmFilm')
-            #f35 = gmd.get_tag_interpreted_string('Exif.Photo.FocalLengthIn35mmFilm')
-            #print('%s ЭФР: %s' % (imgfilename, f35))
+        if not os.path.exists(photodir):
+            return 'Каталог "%s" не существует или недоступен' % photodir
 
-            self.statTotalPhotos += 1
+        def __no_progress(sobj, fraction, msg):
+            return True
 
-        if not os.path.exists(rootdir):
-            return 'Каталог "%s" не существует или недоступен' % rootdir
+        if not callable(progress):
+            progress = __no_progress
 
-        for root, dirs, files in os.walk(rootdir):
+        allFiles = []
+
+        if not progress(self, -1, 'Поиск файлов...'):
+            return
+
+        for root, dirs, files in os.walk(photodir):
             for fname in files:
                 fpath = os.path.join(root, fname)
 
-                __scan_file(fpath)
+                self.statTotalFiles += 1
 
-                # callback вызываем в последнюю очередь, дабы оно
-                # при желании могло показать текущее кол-во снимков и т.п.
-                if callable(callback) and not callback(self, fpath):
+                fext = os.path.splitext(fname)[1].lower()
+
+                if fext not in ftypes:
+                    continue
+
+                allFiles.append(fpath)
+
+                if not progress(self, -1, ''):
+                    return
+
+        nFoundFiles = len(allFiles)
+
+        if nFoundFiles:
+            if not progress(self, -1, 'Обработка метаданных...'):
+                return
+
+            for ixFile, fpath in enumerate(allFiles, 1):
+                self.__process_file_metadata(fpath)
+
+                if not progress(self, ixFile / nFoundFiles, ''):
                     return
 
     class StatTable():
@@ -433,19 +459,25 @@ class PhotoStatistics():
         return '\n'.join(buf)
 
 
-def __dbg_scan_cbk(statobj, fpath):
-    print(fpath)
-    return True
-
-
 if __name__ == '__main__':
     print('[debugging %s]' % __file__)
 
     #PHOTODIR = '~/photos.current'
     PHOTODIR = '~/docs-private/photos/'
 
+    def __dbg_scan_cbk(statobj, fraction, message):
+        if message:
+            print(message)
+
+        if fraction < 0.0:
+            pass #print('.',)
+        else:
+            print('%d%%' % int(fraction * 100))
+
+        return True
+
     stats = PhotoStatistics()
-    e = stats.scan_directory(os.path.expanduser(PHOTODIR), pstat_config.RAW_FILE_EXTS, __dbg_scan_cbk)
+    e = stats.gather_photo_statistics(os.path.expanduser(PHOTODIR), pstat_config.RAW_FILE_EXTS, __dbg_scan_cbk)
     if e:
         print('Ошибка: %s' % e)
         exit(1)

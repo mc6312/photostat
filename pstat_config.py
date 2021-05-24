@@ -31,13 +31,13 @@ from pstat_common import *
 
 
 # список расширений файлов
-IMAGE_FILE_EXTS = set(('jpg', 'jpeg', 'tif', 'tiff', 'png'))
-RAW_FILE_EXTS   = set(('3fr', 'ari', 'arw', 'srf', 'sr2',
-    'bay', 'braw', 'cri', 'crw', 'cr2', 'cr3', 'cap', 'iiq',
-    'eip', 'dcs', 'dcr', 'drf', 'k25', 'kdc', 'dng', 'erf',
-    'fff', 'gpr', 'mef', 'mdc', 'mos', 'mrw', 'nef', 'nrw',
-    'orf', 'pef', 'ptx', 'pxn', 'r3d', 'raf', 'raw', 'rw2',
-    'rwl', 'rwz', 'srw', 'x3f'))
+IMAGE_FILE_EXTS = set(('.jpg', '.jpeg', '.tif', '.tiff', '.png'))
+RAW_FILE_EXTS   = set(('.3fr', '.ari', '.arw', '.srf', '.sr2',
+    '.bay', '.braw', '.cri', '.crw', '.cr2', '.cr3', '.cap', '.iiq',
+    '.eip', '.dcs', '.dcr', '.drf', '.k25', '.kdc', '.dng', '.erf',
+    '.fff', '.gpr', '.mef', '.mdc', '.mos', '.mrw', '.nef', '.nrw',
+    '.orf', '.pef', '.ptx', '.pxn', '.r3d', '.raf', '.raw', '.rw2',
+    '.rwl', '.rwz', '.srw', '.x3f'))
 
 
 class Configuration():
@@ -64,7 +64,7 @@ class Configuration():
         self.cfgPhotoRootDir = self.DEF_PHOTO_ROOT_DIR
         self.cfgStatSaveFile = self.DEF_STAT_SAVE_DIR
 
-        self.cfgScanRAWfiles = self.DEF_SCAN_RAW_FILES
+        self.cfgScanRAWFiles = self.DEF_SCAN_RAW_FILES
         self.cfgScanImageFiles = self.DEF_SCAN_IMAGE_FILES
 
         self.cfgRAWFileExtensions = RAW_FILE_EXTS
@@ -74,13 +74,13 @@ class Configuration():
         return '''self.cfgFN = '%s'
 self.cfgPhotoRootDir = '%s'
 self.cfgStatSaveFile = '%s'
-self.cfgScanRAWfiles = %s
+self.cfgScanRAWFiles = %s
 self.cfgScanImageFiles = %s
 self.cfgRAWFileExtensions = %s
 self.cfgImageFileExtensions = %s''' % (self.cfgFN,
             self.cfgPhotoRootDir,
             self.cfgStatSaveFile,
-            self.cfgScanRAWfiles,
+            self.cfgScanRAWFiles,
             self.cfgScanImageFiles,
             self.cfgRAWFileExtensions,
             self.cfgImageFileExtensions)
@@ -99,12 +99,13 @@ self.cfgImageFileExtensions = %s''' % (self.cfgFN,
                     cfg.read_file(f, self.cfgFN)
 
             except Exception as ex:
+                dump_exception()
                 return 'Ошибка загрузки настроек - %s' % exception_to_str(ex)
 
         self.cfgPhotoRootDir = os.path.abspath(cfg.get(self.CS_SETTINGS, self.CV_PHOTO_ROOT_DIR, fallback=self.DEF_PHOTO_ROOT_DIR))
         self.cfgStatSaveFile = os.path.abspath(cfg.get(self.CS_SETTINGS, self.CV_STAT_SAVE_FILE, fallback=self.DEF_STAT_SAVE_DIR))
 
-        self.cfgScanRAWfiles = cfg.getboolean(self.CS_SETTINGS, self.CV_SCAN_RAW_FILES, fallback=self.DEF_SCAN_RAW_FILES)
+        self.cfgScanRAWFiles = cfg.getboolean(self.CS_SETTINGS, self.CV_SCAN_RAW_FILES, fallback=self.DEF_SCAN_RAW_FILES)
         self.cfgScanImageFiles = cfg.getboolean(self.CS_SETTINGS, self.CV_SCAN_IMAGE_FILES, fallback=self.DEF_SCAN_IMAGE_FILES)
 
         def get_set_of_str(section, option, defval):
@@ -137,7 +138,7 @@ self.cfgImageFileExtensions = %s''' % (self.cfgFN,
         cfg.set(self.CS_SETTINGS, self.CV_PHOTO_ROOT_DIR, self.cfgPhotoRootDir)
         cfg.set(self.CS_SETTINGS, self.CV_STAT_SAVE_FILE, self.cfgStatSaveFile)
 
-        cfg.set(self.CS_SETTINGS, self.CV_SCAN_RAW_FILES, str(self.cfgScanRAWfiles))
+        cfg.set(self.CS_SETTINGS, self.CV_SCAN_RAW_FILES, str(self.cfgScanRAWFiles))
         cfg.set(self.CS_SETTINGS, self.CV_SCAN_IMAGE_FILES, str(self.cfgScanImageFiles))
 
         def set_set_of_str(section, option, v):
@@ -159,7 +160,7 @@ self.cfgImageFileExtensions = %s''' % (self.cfgFN,
         if not self.cfgPhotoRootDir or not os.path.isdir(self.cfgPhotoRootDir):
             return False
 
-        if not self.cfgScanRAWfiles and not self.cfgScanImageFiles:
+        if not self.cfgScanRAWFiles and not self.cfgScanImageFiles:
             return False
 
         return True

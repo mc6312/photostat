@@ -43,15 +43,18 @@ class PhotoStatUI():
     def wnd_destroy(self, widget, data=None):
         Gtk.main_quit()
 
-    def scan_progress(self, stats, fpath):
+    def scan_progress(self, stats, fraction, message):
         self.progressDelay -= 1
         if self.progressDelay <= 0:
             self.progressDelay = self.PROGRESS_DELAY
 
-            self.progressBar.pulse()
+            if fraction < 0.0:
+                self.progressBar.pulse()
+            else:
+                self.progressBar.set_fraction(fraction)
 
-            #print(stats.statTotalFiles, stats.statTotalPhotos)
-            self.txtProgress.set_text('Просмотрено файлов: %d\nИз них учтено: %d' % (stats.statTotalFiles, stats.statTotalPhotos))
+            if message:
+                self.txtProgress.set_text(message)
 
         flush_gtk_events()
 
@@ -60,7 +63,7 @@ class PhotoStatUI():
     def scan_photos(self):
         try:
             self.stopScanning = False
-            self.progressDelay = self.PROGRESS_DELAY
+            self.progressDelay = 0 # пущай в первую итерацию отработает #self.PROGRESS_DELAY
             #self.progressBar.set_sensitive(True)
             # иначе не будет обновляться - при активной странице прогресса всё окно not sensitive!
 
@@ -68,13 +71,13 @@ class PhotoStatUI():
 
             ftypes = set()
 
-            if self.config.cfgScanRAWfiles:
+            if self.config.cfgScanRAWFiles:
                 ftypes.update(RAW_FILE_EXTS)
 
             if self.config.cfgScanImageFiles:
                 ftypes.update(IMAGE_FILE_EXTS)
 
-            e = self.stats.scan_directory(self.config.cfgPhotoRootDir, ftypes, self.scan_progress)
+            e = self.stats.gather_photo_statistics(self.config.cfgPhotoRootDir, ftypes, self.scan_progress)
             if e:
                 msg_dialog(self.window, APP_TITLE, e)
 
@@ -192,7 +195,12 @@ class PhotoStatUI():
         # Страница 1: выбор каталога и типов файлов
         #
 
-        self.fcbtnPicDir = uibldr.get_object('fcbtnPicDir')
+        self.fcbtnPicDir, self.chkScanImageFiles, self.chkScanRAWFiles = get_ui_widgets(uibldr,
+            'fcbtnPicDir', 'chkScanImageFiles', 'chkScanRAWFiles')
+
+        self.chkScanImageFiles.set_active(self.config.cfgScanImageFiles)
+        self.chkScanRAWFiles.set_active(self.config.cfgScanRAWFiles)
+
         self.fcbtnPicDir.select_filename(self.config.cfgPhotoRootDir)
 
         #
@@ -221,6 +229,12 @@ class PhotoStatUI():
         self.setup_sensitive_widgets()
 
         uibldr.connect_signals(self)
+
+    def chkScanImageFiles_toggled(self, cbtn):
+        self.config.cfgScanImageFiles = cbtn.get_active()
+
+    def chkScanRAWFiles_toggled(self, cbtn):
+        self.config.cfgScanRAWFiles = cbtn.get_active()
 
     def btnAbout_clicked(self, btn):
         AboutDialog(self.window).run()
