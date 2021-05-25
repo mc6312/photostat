@@ -23,8 +23,8 @@
         <property name="label" translatable="yes">Собрать статистику</property>
         <property name="use-underline">True</property>
         <signal name="activate" handler="btnNextPage_clicked" swapped="no"/>
-        <accelerator key="Return" signal="activate"/>
         <accelerator key="KP_Enter" signal="activate"/>
+        <accelerator key="Return" signal="activate"/>
       </object>
     </child>
     <child>
@@ -224,7 +224,7 @@
                         <property name="orientation">vertical</property>
                         <property name="spacing">4</property>
                         <child>
-                          <object class="GtkLabel" id="txtProgress">
+                          <object class="GtkLabel" id="txtProgressStage">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="label" translatable="yes">Обработка...</property>
@@ -236,6 +236,18 @@
                           </packing>
                         </child>
                         <child>
+                          <object class="GtkLabel" id="txtProgress">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="label" translatable="yes">Обработка...</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
                           <object class="GtkProgressBar" id="progressBar">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
@@ -243,7 +255,7 @@
                           <packing>
                             <property name="expand">False</property>
                             <property name="fill">True</property>
-                            <property name="position">1</property>
+                            <property name="position">2</property>
                           </packing>
                         </child>
                       </object>

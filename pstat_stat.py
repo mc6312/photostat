@@ -252,38 +252,42 @@ class PhotoStatistics():
         else:
             self.statByYear[year] = {0:1, month:1}
 
-    def gather_photo_statistics(self, photodir, ftypes, progress=None):
+    def gather_photo_statistics(self, photodir, ftypes, stagedisp=None, progressdisp=None):
         """Поиск файлов фотографий и учёт их метаданных.
 
         Параметры:
-            photodir    - строка с путём к каталогу с фотографиями;
-            ftypes      - множество (set) допустимых расширений имен файлов
-            progress    - функция или метод класса, получает следующие параметры:
-                          1: экземпляр класса PhotoStatistics (т.е. self),
-                          2: float - значение прогресса;
-                              при значении < 0 прогрессбар отображается
-                              в режиме "пульсации";
-                          3: строка с сообщением (м.б. пустой).
-                          Функция должна возвращать булевское значение:
-                            True - перейти к следующему файлу,
-                            False - прервать работу.
+            photodir        - строка с путём к каталогу с фотографиями;
+            ftypes          - множество (set) допустимых расширений имен файлов
+            stagedisp       - функция или метод класса, получает один параметр -
+                              строку с названием стадии процесса;
+            progressdisp    - функция или метод класса, получает следующие параметры:
+                              1: экземпляр класса PhotoStatistics (т.е. self),
+                              2: float - значение прогресса;
+                                  при значении < 0 прогрессбар отображается
+                                  в режиме "пульсации";
+                              3: строка с сообщением о деталях процесса (м.б. пустой).
+                              Функция должна возвращать булевское значение:
+                                True - перейти к следующему файлу,
+                                False - прервать работу.
 
-        Возвращает пустую строку или None при отсутствии ошибок,
-        иначе - строку с сообщением об ошибке."""
+        Возвращает кортеж из двух элементов:
+        1. булевское значение - True, если сбор завершен (в т.ч. с ошибкой),
+           False, если сбор прерван пользователем;
+        2. None или пустая строка, если ошибок не было, или строка
+           с сообщением об ошибке."""
 
         if not os.path.exists(photodir):
-            return 'Каталог "%s" не существует или недоступен' % photodir
+            return (True, 'Каталог "%s" не существует или недоступен' % photodir)
 
-        def __no_progress(sobj, fraction, msg):
-            return True
+        if not callable(progressdisp):
+            progressdisp = lambda sobj, fraction, msg: True
 
-        if not callable(progress):
-            progress = __no_progress
+        if not callable(stagedisp):
+            stagedisp = lambda msg: None
 
         allFiles = []
 
-        if not progress(self, -1, 'Поиск файлов...'):
-            return
+        stagedisp('Поиск файлов')
 
         for root, dirs, files in os.walk(photodir):
             for fname in files:
@@ -298,20 +302,21 @@ class PhotoStatistics():
 
                 allFiles.append(fpath)
 
-                if not progress(self, -1, ''):
-                    return
+                if not progressdisp(self, -1, ''):
+                    return (False, None)
 
         nFoundFiles = len(allFiles)
 
         if nFoundFiles:
-            if not progress(self, -1, 'Обработка метаданных...'):
-                return
+            stagedisp('Обработка метаданных')
 
             for ixFile, fpath in enumerate(allFiles, 1):
                 self.__process_file_metadata(fpath)
 
-                if not progress(self, ixFile / nFoundFiles, ''):
-                    return
+                if not progressdisp(self, ixFile / nFoundFiles, 'Файл %d из %d' % (ixFile, nFoundFiles)):
+                    return (False, None)
+
+        return (True, None)
 
     class StatTable():
         """Вспомогательный класс для хранения сформированной таблицы
@@ -507,7 +512,7 @@ class PhotoStatistics():
             months = set(year.keys()) - {0}
             for month in sorted(months):
                 np = year[month]
-                table.rows.append(['  %s' % self.MONTH_STR[month],
+                table.rows.append(['  %s' % self.MONTH_STR[month - 1],
                     np,
                     '%.1f%%' % (100.0 * np / ytotal)])
 
@@ -540,7 +545,7 @@ def __test_scan_photos():
     cfg = Configuration(get_config_file_name())
     cfg.load()
 
-    def __dbg_scan_cbk(statobj, fraction, message):
+    def __progressdisp(statobj, fraction, message):
         if message:
             print(message)
 
@@ -551,9 +556,17 @@ def __test_scan_photos():
 
         return True
 
+    def __stagedisp(msg):
+        print(msg)
+
     stats = PhotoStatistics()
-    e = stats.gather_photo_statistics(cfg.cfgPhotoRootDir, pstat_config.RAW_FILE_EXTS, __dbg_scan_cbk)
-    if e:
+
+    ok, em = stats.gather_photo_statistics(cfg.cfgPhotoRootDir,
+        pstat_config.RAW_FILE_EXTS,
+        __stagedisp,
+        __progressdisp)
+
+    if not ok or e:
         print('Ошибка: %s' % e)
         exit(1)
 

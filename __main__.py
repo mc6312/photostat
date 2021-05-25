@@ -43,7 +43,7 @@ class PhotoStatUI():
     def wnd_destroy(self, widget, data=None):
         Gtk.main_quit()
 
-    def scan_progress(self, stats, fraction, message):
+    def __scan_progress(self, stats, fraction, message):
         self.progressDelay -= 1
         if self.progressDelay <= 0:
             self.progressDelay = self.PROGRESS_DELAY
@@ -53,19 +53,21 @@ class PhotoStatUI():
             else:
                 self.progressBar.set_fraction(fraction)
 
-        if message and message != self.txtProgress.get_text():
             self.txtProgress.set_text(message)
 
         flush_gtk_events()
 
         return not self.stopScanning
 
+    def __scan_stage(self, msg):
+        self.txtProgressStage.set_text(msg)
+        flush_gtk_events()
+
     def scan_photos(self):
         try:
+            nextPage = self.PAGE_RESULT
             self.stopScanning = False
             self.progressDelay = self.PROGRESS_DELAY
-            #self.progressBar.set_sensitive(True)
-            # иначе не будет обновляться - при активной странице прогресса всё окно not sensitive!
 
             self.stats.clear()
 
@@ -77,29 +79,45 @@ class PhotoStatUI():
             if self.config.cfgScanImageFiles:
                 ftypes.update(IMAGE_FILE_EXTS)
 
-            e = self.stats.gather_photo_statistics(self.config.cfgPhotoRootDir, ftypes, self.scan_progress)
-            if e:
-                msg_dialog(self.window, APP_TITLE, e)
+            try:
+                ok, em = self.stats.gather_photo_statistics(self.config.cfgPhotoRootDir,
+                    ftypes,
+                    self.__scan_stage,
+                    self.__scan_progress)
+            except Exception as ex:
+                dump_exception()
+                ok = True
+                em = str(ex)
+
+            if em or not ok:
+                nextPage = self.PAGE_START
+
+                if em:
+                    msg_dialog(self.window, APP_TITLE, e)
 
         finally:
             self.update_stats_view()
-            self.select_next_page(False) # ибо нефиг после обхода каталогов на этой странице оставаться
+            # принудительно переключаем страницу морды
+            self.pages.set_current_page(nextPage)
 
-    def stop_scanning(self):
-        self.stopScanning = True
-        self.pages.set_current_page(self.PAGE_START)
+    def select_next_page(self):
+        """Реакция на кнопку/пункт меню *NextPage - переход на следующую
+        стадию процесса в зависимости от текущей."""
 
-    def select_next_page(self, byButton):
-        if byButton:
-            page = self.PAGE_PROGRESS if self.curPage == self.PAGE_START else self.PAGE_START
+        if self.curPage == self.PAGE_START:
+            # запуск сбора данных
+            nextPage = self.PAGE_PROGRESS
+        elif self.curPage == self.PAGE_PROGRESS:
+            # остановка сбора данных, возврат на начальную страницу
+            self.stopScanning = True
+            nextPage = self.PAGE_START
         else:
-            page = self.curPage + 1
-            if page == self.PAGES_COUNT:
-                page = self.PAGE_START
+            # возврат на начальную страницу
+            nextPage = self.PAGE_START
 
-        self.pages.set_current_page(page)
+        self.pages.set_current_page(nextPage)
 
-        if page == self.PAGE_PROGRESS:
+        if nextPage == self.PAGE_PROGRESS:
             self.scan_photos()
 
     def update_stats_view(self):
@@ -181,7 +199,7 @@ class PhotoStatUI():
                 np = year[month]
                 pcs = 100.0 * np / ytotal
                 self.statViewByYear.store.append(itr,
-                    (self.stats.MONTH_STR[month], str(np), pcs, '%.1f%%' % pcs))
+                    (self.stats.MONTH_STR[month - 1], str(np), pcs, '%.1f%%' % pcs))
 
         #
         self.statViewByYear.refresh_end()
@@ -239,8 +257,8 @@ class PhotoStatUI():
         # Страница 2: сбор статистики
         #
 
-        self.txtProgress, self.progressBar = get_ui_widgets(uibldr,
-            'txtProgress', 'progressBar')
+        self.txtProgress, self.txtProgressStage, self.progressBar = get_ui_widgets(uibldr,
+            'txtProgress', 'txtProgressStage', 'progressBar')
 
         #
         # Страница 3: отображение статистики
@@ -273,7 +291,7 @@ class PhotoStatUI():
         AboutDialog(self.window).run()
 
     def btnNextPage_clicked(self, btn):
-        self.select_next_page(True)
+        self.select_next_page()
 
     def btnResultCopy_clicked(self, btn):
         self.copy_stat_to_clipboard()
