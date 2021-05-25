@@ -26,6 +26,7 @@ from gi.repository import GExiv2
 GExiv2.log_set_level(GExiv2.LogLevel.MUTE)
 
 import os, os.path
+import datetime
 from fractions import Fraction
 
 import pstat_config
@@ -127,11 +128,21 @@ class PhotoStatistics():
         # значения - экземпляры ApertureStatistics
         self.statApertures = {}
 
-        # общее кол-во снимков
+        # общее кол-во снимков с хоть какими-то метаданными
         self.statTotalPhotos = 0
 
         # кол-во снимков с известными ФР (т.е. у которых EXIF содержит поле ФР)
         self.statKnownFocals = 0
+
+        # статистика количества снимков по годам:
+        # ключи - года, значения - словари,
+        # где ключи - месяцы, а значения - счетчики снимков
+        # снимки без даты не учитываются
+        self.statByYear = {}
+
+        # общее количество снимков, где в метаданных указана дата (что не гарантировано)
+        # т.е. значение может не совпадать с self.statTotalPhotos
+        self.statByYearTotal = 0
 
         # общее количество просмотренных файлов
         self.statTotalFiles = 0
@@ -144,6 +155,13 @@ class PhotoStatistics():
         self.statTotalPhotos = 0
         self.statKnownFocals = 0
         self.statTotalFiles = 0
+
+    # тэги даты/времени создания снимка в порядке предпочтения
+    # (авось хоть какой обнаружится в файле)
+    __DT_TAGS = ('Exif.Photo.DateTimeDigitized',
+        'Exif.Image.DateTimeOriginal',
+        'Exif.Photo.DateTimeOriginal',
+        'Exif.Image.DateTime')
 
     def __process_file_metadata(self, fpath):
         """Извлечение метаданных из файла фотографии и учёт их в статистике."""
@@ -160,10 +178,14 @@ class PhotoStatistics():
 
         if not gmd.has_exif():
             # такие товарищи нам совсем не товарищи
+            # снимки без метаданных не учитываем ваще совсем
             return
 
-        focal = int(round(gmd.get_focal_length()))
+        #
+        self.statTotalPhotos += 1
+
         # дробные значения ФР нам нафиг не нужны
+        focal = int(round(gmd.get_focal_length()))
 
         aperture = gmd.get_exif_tag_rational('Exif.Photo.FNumber')
         if not aperture:
@@ -197,11 +219,38 @@ class PhotoStatistics():
 
         self.statKnownFocals += 1
 
-        #f35 = gmd.get_tag_long('Exif.Photo.FocalLengthIn35mmFilm')
-        #f35 = gmd.get_tag_interpreted_string('Exif.Photo.FocalLengthIn35mmFilm')
-        #print('%s ЭФР: %s' % (imgfilename, f35))
+        #
+        # определяем дату создания снимка для статистики по годам и месяцам
+        #
+        year = None
+        month = None
 
-        self.statTotalPhotos += 1
+        for dtn in self.__DT_TAGS:
+            tagv = gmd.get_tag_string(dtn)
+            if tagv:
+                try:
+                    pdate = datetime.datetime.strptime(tagv, '%Y:%m:%d %H:%M:%S').date()
+                except:
+                    continue
+
+                year = pdate.year
+                month = pdate.month
+                break
+
+        # пихаем статистику по годам
+        if year is None or month is None:
+            # снимки без даты не учитываем
+            return
+
+        self.statByYearTotal += 1
+
+        # месяцы с номером 0 содержат общее кол-во снимков за соотв. год
+
+        if year in self.statByYear:
+            self.statByYear[year][month] = self.statByYear[year].get(month, 0) + 1
+            self.statByYear[year][0] = self.statByYear[year].get(0, 0) + 1
+        else:
+            self.statByYear[year] = {0:1, month:1}
 
     def gather_photo_statistics(self, photodir, ftypes, progress=None):
         """Поиск файлов фотографий и учёт их метаданных.
@@ -277,12 +326,15 @@ class PhotoStatistics():
 
         В столбцах - диафрагмы, в строках - фокусные расстояния.
         В ячейках - кол-во снимков для соотв. фокусного и диафрагмы.
-        Первый столбец - заголовки строк, первая строка - заголовки столбцов.
-        Последний столбец и последняя строка - суммарные значения."""
+        Подразумевается, что (но не обязательно):
+            - первый столбец - заголовки строк, первая строка - заголовки
+              столбцов;
+            - последний столбец и последняя строка - суммарные значения."""
 
         COL_SEPARATOR = '  '
 
-        def __init__(self):
+        def __init__(self, title):
+            self.title = title
             self.rows = []
 
         def clear(self):
@@ -294,7 +346,7 @@ class PhotoStatistics():
 
             Если таблица пустая, возвращает пустую строку."""
 
-            ret = []
+            ret = [self.title]
 
             if self.rows:
                 colWidths = [0] * len(self.rows[0])
@@ -326,15 +378,15 @@ class PhotoStatistics():
 
     TABLE_MIN_ROW_THRESHOLD = 2 # порог (в процентах), ниже которого строки таблицы объединяются в строку с заголовком "прочие"
 
-    def get_stat_table(self, reduceRows=True, reduceCols=True):
-        """Получение результата после сбора статистики.
+    # названия месяцев; пока без учёта локали, а там видно будет
+    MONTH_STR = ('январь', 'февраль', 'март', 'апрель',
+        'май', 'июнь', 'июль', 'август',
+        'сентябрь', 'октябрь', 'ноябрь', 'декабрь')
 
-        reduceRows - если True - группировать в строку "прочие" строки,
-                     в которых суммарное кол-во снимков меньше порога;
-        reduceCols - если True - группировать в столбец "прочие" столбцы,
-                     в которых суммарное кол-во снимков меньше порога.
-
-        Возвращает экземпляр класса PhotoStatistics.StatTable."""
+    def get_stat_table_by_focals(self):
+        """Получение результата после сбора статистики:
+        таблица статистики по диафрагмам и фокусным расстояниям.
+        Возвращает экземпляр класса PhotoStatistics.StatTable"""
 
         S_TOTAL = 'Всего'
         S_UNK = 'неизв.'
@@ -348,15 +400,6 @@ class PhotoStatistics():
 
         # нормализованные значения диафрагм - ключи для столбцов
         allApertures = set(self.statApertures.keys())
-        otherApertures = set()
-
-        # фильтруем данные, группируя малозначимые столбцы
-        if reduceCols:
-            #!!!
-            warn('%s.get_stat_table(): группировка столбцов не реализована!' % self.__class__.__name__)
-
-            if otherApertures:
-                allApertures -= otherApertures
 
         usedApertures = list(sorted(allApertures))
 
@@ -374,7 +417,7 @@ class PhotoStatistics():
         numCols = len(colHeaders)
         numDataCols = len(usedApertures)
 
-        table = self.StatTable()
+        table = self.StatTable('Статистика по фокусным расстояниям и значениям диафрагмы')
         table.rows.append(colHeaders)
 
         #
@@ -386,14 +429,12 @@ class PhotoStatistics():
         otherFocals = set() # ФР, процент снимков с которыми <TABLE_MIN_ROW_THRESHOLD
 
         # фильтруем данные, группируя малозначимые строки
-        if reduceRows:
-            for focal in self.statFocals:
-                if self.statFocals[focal].totalPhotos < tableMinThreshold:
-                    otherFocals.add(focal)
+        for focal in self.statFocals:
+            if self.statFocals[focal].totalPhotos < tableMinThreshold:
+                otherFocals.add(focal)
 
-            if otherFocals:
-                allFocals -= otherFocals
-        #print(otherFocals)
+        if otherFocals:
+            allFocals -= otherFocals
 
         usedFocals = list(sorted(allFocals))
 
@@ -446,6 +487,37 @@ class PhotoStatistics():
 
         return table
 
+    def get_stat_table_by_year(self):
+        """Получение таблицы статистики по годам.
+        Возвращает экземпляр StatTable."""
+
+        table = self.StatTable('Количество снимков по годам и месяцам')
+
+        for yearno, year in sorted(self.statByYear.items()):
+            # номер года и кол-во снимков за год
+            ytotal = year[0]
+
+            # здесь и далее: в строку преобразуем только те значения,
+            # которые не должны быть преобразованы в StatTable.__str__()
+            table.rows.append([str(yearno),
+                ytotal,
+                '%.1f%%' % (100.0 * ytotal / self.statByYearTotal)])
+
+            # по месяцам, за исключением нулевого (суммы за год)
+            months = set(year.keys()) - {0}
+            for month in sorted(months):
+                np = year[month]
+                table.rows.append(['  %s' % self.MONTH_STR[month],
+                    np,
+                    '%.1f%%' % (100.0 * np / ytotal)])
+
+        return table
+
+    def get_stat_tables_str(self):
+        return '%s\n\n%s' % (
+            self.get_stat_table_by_focals(),
+            self.get_stat_table_by_year())
+
     def __str__(self):
         buf = ['statFocals:'] + list(map(lambda k: '  %7s: %s' % ('f=%d' % k, str(self.statFocals[k])), sorted(self.statFocals.keys())))
 
@@ -456,14 +528,17 @@ class PhotoStatistics():
         buf.append('statKnownFocals: %d' % self.statKnownFocals)
         buf.append('statTotalFiles:  %d' % self.statTotalFiles)
 
+        #FIXME м.б. стоит допилить преобразование в строку
+        buf.append('statByYear: %s' % self.statByYear)
+
         return '\n'.join(buf)
 
 
-if __name__ == '__main__':
-    print('[debugging %s]' % __file__)
+def __test_scan_photos():
+    from pstat_config import Configuration, get_config_file_name
 
-    #PHOTODIR = '~/photos.current'
-    PHOTODIR = '~/docs-private/photos/'
+    cfg = Configuration(get_config_file_name())
+    cfg.load()
 
     def __dbg_scan_cbk(statobj, fraction, message):
         if message:
@@ -477,15 +552,18 @@ if __name__ == '__main__':
         return True
 
     stats = PhotoStatistics()
-    e = stats.gather_photo_statistics(os.path.expanduser(PHOTODIR), pstat_config.RAW_FILE_EXTS, __dbg_scan_cbk)
+    e = stats.gather_photo_statistics(cfg.cfgPhotoRootDir, pstat_config.RAW_FILE_EXTS, __dbg_scan_cbk)
     if e:
         print('Ошибка: %s' % e)
         exit(1)
 
     #print(stats)
 
-    stattab = stats.get_stat_table()#reduceRows=False)
-    print(stattab)
+    print(stats.get_stat_tables_str())
     print('\nВсего файлов: %d' % stats.statTotalFiles)
-    #print('\nСтатистика:')
-    #print(stats.format_statistics_str())
+
+
+if __name__ == '__main__':
+    print('[debugging %s]' % __file__)
+
+    __test_scan_photos()

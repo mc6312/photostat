@@ -2,11 +2,6 @@
 <!-- Generated with glade 3.38.2 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
-  <object class="GtkImage" id="imgBtnAbout">
-    <property name="visible">True</property>
-    <property name="can-focus">False</property>
-    <property name="icon-name">dialog-information-symbolic</property>
-  </object>
   <object class="GtkImage" id="imgBtnResultCopy">
     <property name="visible">True</property>
     <property name="can-focus">False</property>
@@ -18,6 +13,84 @@
     <property name="icon-name">document-save-as-symbolic</property>
   </object>
   <object class="GtkListStore" id="lstoreFASummary"/>
+  <object class="GtkMenu" id="menu">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkMenuItem" id="mnuNextPage">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Собрать статистику</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="btnNextPage_clicked" swapped="no"/>
+        <accelerator key="Return" signal="activate"/>
+        <accelerator key="KP_Enter" signal="activate"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mnuResultCopy">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Копировать статистику в буфер обмена</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="btnResultCopy_clicked" swapped="no"/>
+        <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mnuResultSave">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Сохранить статистику в файле</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="btnResultSave_clicked" swapped="no"/>
+        <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mnuAbout">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">О программе...</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="btnAbout_clicked" swapped="no"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mnuQuit">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Выход</property>
+        <property name="use-underline">True</property>
+        <signal name="activate" handler="wnd_destroy" swapped="no"/>
+        <accelerator key="q" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkTreeStore" id="tstoreStatByYear">
+    <columns>
+      <!-- column-name yearmonth -->
+      <column type="gchararray"/>
+      <!-- column-name countstr -->
+      <column type="gchararray"/>
+      <!-- column-name percents -->
+      <column type="gfloat"/>
+      <!-- column-name percentstr -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
   <object class="GtkWindow" id="wndMain">
     <property name="can-focus">False</property>
     <property name="window-position">mouse</property>
@@ -268,7 +341,72 @@
                               </packing>
                             </child>
                             <child>
-                              <placeholder/>
+                              <object class="GtkLabel">
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="label" translatable="yes">Количество снимков по годам:</property>
+                                <property name="xalign">0</property>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">2</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkTreeView" id="tvStatByYear">
+                                <property name="visible">True</property>
+                                <property name="can-focus">True</property>
+                                <property name="model">tstoreStatByYear</property>
+                                <property name="headers-clickable">False</property>
+                                <property name="enable-search">False</property>
+                                <child internal-child="selection">
+                                  <object class="GtkTreeSelection"/>
+                                </child>
+                                <child>
+                                  <object class="GtkTreeViewColumn" id="colYearMonth">
+                                    <property name="title" translatable="yes">Г/М</property>
+                                    <child>
+                                      <object class="GtkCellRendererText" id="crYearMonth"/>
+                                      <attributes>
+                                        <attribute name="text">0</attribute>
+                                      </attributes>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkTreeViewColumn" id="colPercents">
+                                    <property name="title" translatable="yes">Кол-во снимков</property>
+                                    <property name="expand">True</property>
+                                    <child>
+                                      <object class="GtkCellRendererProgress" id="crPercents">
+                                        <property name="text-xalign">0</property>
+                                      </object>
+                                      <attributes>
+                                        <attribute name="text">3</attribute>
+                                        <attribute name="value">2</attribute>
+                                      </attributes>
+                                    </child>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkTreeViewColumn" id="colCount">
+                                    <child>
+                                      <object class="GtkCellRendererText" id="crCount">
+                                        <property name="xalign">1</property>
+                                      </object>
+                                      <attributes>
+                                        <attribute name="text">1</attribute>
+                                      </attributes>
+                                    </child>
+                                  </object>
+                                </child>
+                              </object>
+                              <packing>
+                                <property name="expand">True</property>
+                                <property name="fill">True</property>
+                                <property name="position">3</property>
+                              </packing>
                             </child>
                           </object>
                         </child>
@@ -313,15 +451,33 @@
         <property name="spacing">4</property>
         <property name="show-close-button">True</property>
         <child>
+          <object class="GtkMenuButton" id="btnMenu">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="popup">menu</property>
+            <child>
+              <object class="GtkImage" id="imgBtnMenu">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="icon-name">open-menu-symbolic</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
           <object class="GtkButton" id="btnNextPage">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <signal name="clicked" handler="btnStart_clicked" swapped="no"/>
+            <signal name="clicked" handler="btnNextPage_clicked" swapped="no"/>
             <style>
               <class name="suggested-action"/>
             </style>
           </object>
+          <packing>
+            <property name="position">1</property>
+          </packing>
         </child>
         <child>
           <object class="GtkButton" id="btnResultCopy">
@@ -332,7 +488,7 @@
             <signal name="clicked" handler="btnResultCopy_clicked" swapped="no"/>
           </object>
           <packing>
-            <property name="position">1</property>
+            <property name="position">2</property>
           </packing>
         </child>
         <child>
@@ -344,19 +500,7 @@
             <signal name="clicked" handler="btnResultSave_clicked" swapped="no"/>
           </object>
           <packing>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkButton" id="btnAbout">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="image">imgBtnAbout</property>
-            <signal name="clicked" handler="btnAbout_clicked" swapped="no"/>
-          </object>
-          <packing>
-            <property name="position">4</property>
+            <property name="position">3</property>
           </packing>
         </child>
       </object>

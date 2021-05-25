@@ -53,8 +53,8 @@ class PhotoStatUI():
             else:
                 self.progressBar.set_fraction(fraction)
 
-            if message:
-                self.txtProgress.set_text(message)
+        if message and message != self.txtProgress.get_text():
+            self.txtProgress.set_text(message)
 
         flush_gtk_events()
 
@@ -63,7 +63,7 @@ class PhotoStatUI():
     def scan_photos(self):
         try:
             self.stopScanning = False
-            self.progressDelay = 0 # пущай в первую итерацию отработает #self.PROGRESS_DELAY
+            self.progressDelay = self.PROGRESS_DELAY
             #self.progressBar.set_sensitive(True)
             # иначе не будет обновляться - при активной странице прогресса всё окно not sensitive!
 
@@ -103,43 +103,52 @@ class PhotoStatUI():
             self.scan_photos()
 
     def update_stats_view(self):
-        # чистим отображало от старых настроек и значений
-        self.faSummary.refresh_begin()
-        # т.к. ниже будем создавать новый экземпляр Gtk.ListStore
-        self.faSummary.store = None
+        """Обновление отображалки статистики"""
 
-        while self.faSummary.view.get_n_columns() > 0:
-            self.faSummary.view.remove_column(self.faSummary.view.get_column(0))
+        # чистим отображало от старых настроек и значений
+        self.statViewFA.refresh_begin()
+        # т.к. ниже будем создавать новый экземпляр Gtk.ListStore
+        self.statViewFA.store = None
+
+        while self.statViewFA.view.get_n_columns() > 0:
+            self.statViewFA.view.remove_column(self.statViewFA.view.get_column(0))
+
+        # это дерево только чистим - кол-во столбцов в нём не изменяется
+        self.statViewByYear.refresh_begin()
+
+        # таблицу статистики по годам получаем, но не используем -
+        # для Gtk.TreeStore нужны исходные данные из stats
+        statFA = self.stats.get_stat_table_by_focals()
 
         #
-        stat = self.stats.get_stat_table()
-
-        if stat.rows:
+        # статистика по фокусным/диафрагмам
+        #
+        if statFA.rows:
             # создаем и засираем новую таблицу
             # 1й столбец - заголовок
             # следующие - пары из строки (для отображения)
             # и целого (для прогрессбара)
 
-            lastcol = len(stat.rows[0]) - 1
+            lastcol = len(statFA.rows[0]) - 1
 
             coltypes = [GObject.TYPE_STRING] + [GObject.TYPE_STRING, GObject.TYPE_INT] * lastcol
 
-            self.faSummary.store = Gtk.ListStore(*coltypes)
+            self.statViewFA.store = Gtk.ListStore(*coltypes)
 
-            self.faSummary.view.append_column(Gtk.TreeViewColumn(stat.rows[0][0], Gtk.CellRendererText(), text=0))
+            self.statViewFA.view.append_column(Gtk.TreeViewColumn(statFA.rows[0][0], Gtk.CellRendererText(), text=0))
 
             crpb = Gtk.CellRendererProgress()
             crpb.set_property('text-xalign', 0.0)
 
             for ixcol in range(lastcol):
                 dcol = 1 + (ixcol * 2)
-                col = Gtk.TreeViewColumn(stat.rows[0][ixcol + 1], crpb, text=dcol, value=dcol + 1)
+                col = Gtk.TreeViewColumn(statFA.rows[0][ixcol + 1], crpb, text=dcol, value=dcol + 1)
                 col.set_expand(True)
-                self.faSummary.view.append_column(col)
+                self.statViewFA.view.append_column(col)
 
             # заполняем данными
-            for rowix in range(1, len(stat.rows)):
-                row = stat.rows[rowix]
+            for rowix in range(1, len(statFA.rows)):
+                row = statFA.rows[rowix]
 
                 strow = [row[0]]
                 for col in row[1:]:
@@ -151,10 +160,33 @@ class PhotoStatUI():
 
                     strow.append(p)
 
-                self.faSummary.store.append(strow)
+                self.statViewFA.store.append(strow)
 
-            #
-            self.faSummary.refresh_end()
+        #
+        # статистика по годам
+        #
+        for yearno, year in sorted(self.stats.statByYear.items()):
+            # номер года и кол-во снимков за год
+            ytotal = year[0]
+
+            # здесь и далее: в строку преобразуем только те значения,
+            # которые не должны быть преобразованы в StatTable.__str__()
+            pcs = 100.0 * ytotal / self.stats.statByYearTotal
+            itr = self.statViewByYear.store.append(None,
+                (str(yearno), str(ytotal), pcs, '%.1f%%' % pcs))
+
+            # по месяцам, за исключением нулевого (суммы за год)
+            months = set(year.keys()) - {0}
+            for month in sorted(months):
+                np = year[month]
+                pcs = 100.0 * np / ytotal
+                self.statViewByYear.store.append(itr,
+                    (self.stats.MONTH_STR[month], str(np), pcs, '%.1f%%' % pcs))
+
+        #
+        self.statViewByYear.refresh_end()
+        self.statViewByYear.view.expand_all()
+        self.statViewFA.refresh_end()
 
     def __init__(self, config):
         """Создание окна с виджетами.
@@ -171,7 +203,7 @@ class PhotoStatUI():
         self.window, hdrbar = get_ui_widgets(uibldr,
             'wndMain', 'hdrBar')
 
-        self.window.set_size_request(WIDGET_BASE_WIDTH * 64, WIDGET_BASE_HEIGHT * 25)
+        self.window.set_size_request(WIDGET_BASE_WIDTH * 80, WIDGET_BASE_HEIGHT * 40)
 
         hdrbar.set_title(APP_TITLE)
         hdrbar.set_subtitle('v%s' % APP_VERSION)
@@ -184,8 +216,8 @@ class PhotoStatUI():
         #
         # кнопки
         #
-        self.btnNextPage, self.btnResultCopy, self.btnResultSave = get_ui_widgets(uibldr,
-            'btnNextPage', 'btnResultCopy', 'btnResultSave')
+        self.btnNextPage, self.mnuNextPage, self.btnResultCopy, self.btnResultSave = get_ui_widgets(uibldr,
+            'btnNextPage', 'mnuNextPage', 'btnResultCopy', 'btnResultSave')
 
         self.imgStart = Gtk.Image.new_from_icon_name('system-run-symbolic', Gtk.IconSize.BUTTON)
         self.imgStop = Gtk.Image.new_from_icon_name('media-playback-stop-symbolic', Gtk.IconSize.BUTTON)
@@ -214,7 +246,8 @@ class PhotoStatUI():
         # Страница 3: отображение статистики
         #
 
-        self.faSummary = TreeViewShell.new_from_uibuilder(uibldr, 'tvFASummary')
+        self.statViewFA = TreeViewShell.new_from_uibuilder(uibldr, 'tvFASummary')
+        self.statViewByYear = TreeViewShell.new_from_uibuilder(uibldr, 'tvStatByYear')
 
         # сохранение статистики
 
@@ -239,7 +272,7 @@ class PhotoStatUI():
     def btnAbout_clicked(self, btn):
         AboutDialog(self.window).run()
 
-    def btnStart_clicked(self, btn):
+    def btnNextPage_clicked(self, btn):
         self.select_next_page(True)
 
     def btnResultCopy_clicked(self, btn):
@@ -265,19 +298,23 @@ class PhotoStatUI():
             bStart = bool(self.config.cfgPhotoRootDir)
             bSave = False
             img = self.imgStart
+            txt = 'Собрать статистику'
         elif self.curPage == self.PAGE_PROGRESS:
             bStart = True
             bSave = False
             img = self.imgStop
+            txt = 'Прекратить сбор статистики'
             cadd, cremove = cremove, cadd
         else:
             # self.PAGE_RESULT
             bStart = True
             bSave = True
+            txt = 'Начать сначала'
             img = self.imgHome
 
         self.btnNextPage.set_sensitive(bStart)
         self.btnNextPage.set_image(img)
+        self.mnuNextPage.set_label(txt)
 
         sc = self.btnNextPage.get_style_context()
         sc.remove_class(cremove)
@@ -316,16 +353,15 @@ class PhotoStatUI():
             try:
                 #raise ValueError('Boo!')
                 with open(self.config.cfgStatSaveFile, 'w+') as f:
-                    f.write(str(self.stats.get_stat_table()))
+                    f.write(self.stats.get_stat_tables_str())
             except Exception as ex:
                 msg_dialog(self.window, 'Сохранение статистики в файл',
                                'Не удалось сохранить файл.\n%s' % exception_to_str(ex))
-
     def copy_stat_to_clipboard(self):
         try:
             cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
             cb.clear()
-            cb.set_text(str(self.stats.get_stat_table()), -1)
+            cb.set_text(self.stats.get_stat_tables_str(), -1)
             cb.store()
         except Exception as ex:
             msg_dialog(self.window, 'Копирование статистики в буфер обмена',

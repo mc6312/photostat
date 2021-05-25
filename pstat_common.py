@@ -24,7 +24,7 @@ from traceback import print_exception
 
 
 APP_TITLE = 'Сбор статистки параметров фотографий'
-APP_VERSION = '1.2.1'
+APP_VERSION = '1.3'
 APP_COPYRIGHT = 'Copyright 2017-2021 MC-6312'
 APP_TITLE_VERSION = '%s v%s' % (APP_TITLE, APP_VERSION)
 
