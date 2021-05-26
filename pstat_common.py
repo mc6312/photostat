@@ -21,12 +21,21 @@
 
 
 from traceback import print_exception
+import sys
 
 
 APP_TITLE = 'Сбор статистки параметров фотографий'
-APP_VERSION = '1.3.1'
+APP_VERSION = '1.4'
 APP_COPYRIGHT = 'Copyright 2017-2021 MC-6312'
 APP_TITLE_VERSION = '%s v%s' % (APP_TITLE, APP_VERSION)
+APP_URL = 'http://github.com/mc6312/photostat'
+
+
+def percents_str(v, total):
+    if total <= 0:
+        return '0%'
+    else:
+        return '%.1f%%' % (100.0 * v / total)
 
 
 def exception_to_str(ex):
@@ -43,3 +52,21 @@ def dump_exception(enfo=None):
 
     print_exception(*enfo, file=sys.stderr)
 
+
+def handle_unhandled(exc_type, exc_value, exc_traceback):
+    # дабы не зациклиться, если че рухнет в этом обработчике
+    sys.excepthook = sys.__excepthook__
+
+    print('** Unhandled exception - %s' % exc_type.__name__, file=sys.stderr)
+    dump_exception((exc_type, exc_value, exc_traceback))
+
+    sys.exit(255)
+
+
+sys.excepthook = handle_unhandled
+
+
+if __name__ == '__main__':
+    print('[debugging %s]' % __file__)
+
+    raise ValueError('test exception')

@@ -30,6 +30,7 @@ import datetime
 from fractions import Fraction
 
 import pstat_config
+from pstat_common import *
 
 from warnings import warn
 
@@ -41,11 +42,17 @@ V_OTHERS = 0    # для группировки строк/столбцов, в 
                 # суммарное значение меньше определенной величины
 
 
+# коэффициент для преобразования значения диафрагмы
+# (fractions.Fraction или float) в целое с фиксированной точкой
+
+APERTURE_NORM_CF = 10.0
+
+
 def normalized_aperture(raperture):
     """Преобразует значение raperture (fractions.Fraction)
     в целое число с фиксированной точкой."""
 
-    f = int(round(raperture) * 10)
+    f = int(float(raperture) * APERTURE_NORM_CF)
     if f <= 0:
         f = V_UNKNOWN
 
@@ -70,6 +77,10 @@ class ApertureStatistics():
 
     def __str__(self):
         return 'a=%s: numPhotos=%d' % (self.display, self.numPhotos)
+
+    def __repr__(self):
+        return '%s(value=%s, display=%s, numPhotos=%d)' % (self.__class__.__name__,
+            self.value, self.display, self.numPhotos)
 
 
 class FocalLengthStatistics():
@@ -107,6 +118,12 @@ class FocalLengthStatistics():
     def __str__(self):
         return ', '.join(map(lambda k: str(self.apertures[k]), sorted(self.apertures.keys())))
 
+    def __repr__(self):
+        return '%s(focalLength=%d, totalPhotos=%d, apertures=%s)' % (self.__class__.__name__,
+            self.focalLength,
+            self.totalPhotos,
+            self.apertures)
+
 
 class PhotoStatistics():
     """Статистика по использованным фокусным расстояниям и диафрагмам.
@@ -140,6 +157,12 @@ class PhotoStatistics():
         # снимки без даты не учитываются
         self.statByYear = {}
 
+        # статистика по значениям ISO
+        # ключи - значения ISO Speed, значения - кол-во снимков
+        self.statByISOSpeed = {}
+        # общее кол-во снимков, где в метаданных указано значение ISO Speed
+        self.statByISOSpeedTotal = 0
+
         # общее количество снимков, где в метаданных указана дата (что не гарантировано)
         # т.е. значение может не совпадать с self.statTotalPhotos
         self.statByYearTotal = 0
@@ -150,10 +173,18 @@ class PhotoStatistics():
     def clear(self):
         """Сброс статистики (перед повторным сбором)."""
 
+        self.statTotalPhotos = 0
+
         self.statFocals.clear()
         self.statApertures.clear()
-        self.statTotalPhotos = 0
         self.statKnownFocals = 0
+
+        self.statByYearTotal = 0
+        self.statByYear.clear()
+
+        self.statByISOSpeed.clear()
+        self.statByISOSpeedTotal = 0
+
         self.statTotalFiles = 0
 
     # тэги даты/времени создания снимка в порядке предпочтения
@@ -218,6 +249,19 @@ class PhotoStatistics():
         aobj.numPhotos += 1
 
         self.statKnownFocals += 1
+
+        # статистика по ISO Speed
+
+        isoSpeed = gmd.get_iso_speed()
+        if isoSpeed > 0:
+            self.statByISOSpeedTotal += 1
+
+            self.statByISOSpeed[isoSpeed] = self.statByISOSpeed.get(isoSpeed, 0) + 1
+
+        # статистика по ISO Speed и выдержкам
+        #print(naperture / APERTURE_NORM_CF, isoSpeed)
+        #TODO м.б. сделать статистику по ISO Speed и выдержкам
+        #print(gmd.get_exposure_time())
 
         #
         # определяем дату создания снимка для статистики по годам и месяцам
@@ -302,7 +346,8 @@ class PhotoStatistics():
 
                 allFiles.append(fpath)
 
-                if not progressdisp(self, -1, ''):
+                if not progressdisp(self, -1,
+                    'Всего файлов: %d, будет обработано: %d' % (self.statTotalFiles, len(allFiles))):
                     return (False, None)
 
         nFoundFiles = len(allFiles)
@@ -506,7 +551,7 @@ class PhotoStatistics():
             # которые не должны быть преобразованы в StatTable.__str__()
             table.rows.append([str(yearno),
                 ytotal,
-                '%.1f%%' % (100.0 * ytotal / self.statByYearTotal)])
+                percents_str(ytotal, self.statByYearTotal)])
 
             # по месяцам, за исключением нулевого (суммы за год)
             months = set(year.keys()) - {0}
@@ -514,29 +559,35 @@ class PhotoStatistics():
                 np = year[month]
                 table.rows.append(['  %s' % self.MONTH_STR[month - 1],
                     np,
-                    '%.1f%%' % (100.0 * np / ytotal)])
+                    percents_str(np, ytotal)])
+
+        return table
+
+    def get_stat_table_by_iso(self):
+        table = self.StatTable('Количество снимков с учётом ISO Speed')
+
+        for isoSpeed, nPhotos in sorted(self.statByISOSpeed.items()):
+            table.rows.append([isoSpeed, nPhotos, percents_str(nPhotos, self.statByISOSpeedTotal)])
 
         return table
 
     def get_stat_tables_str(self):
-        return '%s\n\n%s' % (
+        return '\n\n'.join(map(str, (
             self.get_stat_table_by_focals(),
-            self.get_stat_table_by_year())
+            self.get_stat_table_by_year(),
+            self.get_stat_table_by_iso())))
 
-    def __str__(self):
-        buf = ['statFocals:'] + list(map(lambda k: '  %7s: %s' % ('f=%d' % k, str(self.statFocals[k])), sorted(self.statFocals.keys())))
-
-        buf += ['statApertures:'] + list(map(lambda k: '  %7s: %d' % ('f/%s' % self.statApertures[k].display, self.statApertures[k].numPhotos),
-            sorted(self.statApertures.keys())))
-
-        buf.append('statTotalPhotos: %d' % self.statTotalPhotos)
-        buf.append('statKnownFocals: %d' % self.statKnownFocals)
-        buf.append('statTotalFiles:  %d' % self.statTotalFiles)
-
-        #FIXME м.б. стоит допилить преобразование в строку
-        buf.append('statByYear: %s' % self.statByYear)
-
-        return '\n'.join(buf)
+    def __repr__(self):
+        return '%s(statTotalPhotos=%d, statFocals=%s, statApertures=%s, statKnownFocals=%d, statByYear=%s, statByYearTotal=%d, statByISOSpeed=%s, statByISOSpeedTotal=%d, statTotalFiles=%d)' % (self.__class__.__name__,
+            self.statTotalPhotos,
+            self.statFocals,
+            self.statApertures,
+            self.statKnownFocals,
+            self.statByYear,
+            self.statByYearTotal,
+            self.statByISOSpeed,
+            self.statByISOSpeedTotal,
+            self.statTotalFiles)
 
 
 def __test_scan_photos():
@@ -566,11 +617,11 @@ def __test_scan_photos():
         __stagedisp,
         __progressdisp)
 
-    if not ok or e:
-        print('Ошибка: %s' % e)
+    if not ok or em:
+        print('Ошибка: %s' % em)
         exit(1)
 
-    #print(stats)
+    print(stats)
 
     print(stats.get_stat_tables_str())
     print('\nВсего файлов: %d' % stats.statTotalFiles)

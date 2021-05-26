@@ -223,6 +223,7 @@ resourcePaths = get_resource_paths()
 
 
 if __name__ == '__main__':
+    print('[debugging %s]' % __file__)
     #print(resourcePaths)
     #exit(0)
 

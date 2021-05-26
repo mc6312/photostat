@@ -93,7 +93,7 @@ class PhotoStatUI():
                 nextPage = self.PAGE_START
 
                 if em:
-                    msg_dialog(self.window, APP_TITLE, e)
+                    msg_dialog(self.window, APP_TITLE, em)
 
         finally:
             self.update_stats_view()
@@ -133,6 +133,9 @@ class PhotoStatUI():
 
         # это дерево только чистим - кол-во столбцов в нём не изменяется
         self.statViewByYear.refresh_begin()
+
+        # тут тоже только чистим
+        self.statViewByISO.refresh_begin()
 
         # таблицу статистики по годам получаем, но не используем -
         # для Gtk.TreeStore нужны исходные данные из stats
@@ -190,6 +193,9 @@ class PhotoStatUI():
             # здесь и далее: в строку преобразуем только те значения,
             # которые не должны быть преобразованы в StatTable.__str__()
             pcs = 100.0 * ytotal / self.stats.statByYearTotal
+            # здесь и далее: а какого хрена у Gtk.ProgressBar
+            # значение называется fraction, типа float в диапазоне 0..1,
+            # а у CellRendererProgress - value, int в диапазоне 0..100?
             itr = self.statViewByYear.store.append(None,
                 (str(yearno), str(ytotal), pcs, '%.1f%%' % pcs))
 
@@ -202,6 +208,15 @@ class PhotoStatUI():
                     (self.stats.MONTH_STR[month - 1], str(np), pcs, '%.1f%%' % pcs))
 
         #
+        # по значениям ISO Speed
+        #
+        for isoSpeed, nPhotos in sorted(self.stats.statByISOSpeed.items()):
+            self.statViewByISO.store.append((str(isoSpeed),
+                percents_str(nPhotos, self.stats.statByISOSpeedTotal),
+                str(nPhotos),
+                100.0 * nPhotos / self.stats.statByISOSpeedTotal))
+        #
+        self.statViewByISO.refresh_end()
         self.statViewByYear.refresh_end()
         self.statViewByYear.view.expand_all()
         self.statViewFA.refresh_end()
@@ -266,9 +281,30 @@ class PhotoStatUI():
 
         self.statViewFA = TreeViewShell.new_from_uibuilder(uibldr, 'tvFASummary')
         self.statViewByYear = TreeViewShell.new_from_uibuilder(uibldr, 'tvStatByYear')
+        self.statViewByISO = TreeViewShell.new_from_uibuilder(uibldr, 'tvStatByISO')
 
         # сохранение статистики
 
+        # т.к. Glade текущей версии (3.38.2) с какого-то перепугу
+        # не умеет создавать
+        # а) диалоги _сохранения_ (только открытия файлов и выбора каталога)
+        # б) не умеет пихать стандартные кнопки диалогов в ихий же HeaderBar
+        # создаём диалог тупо вручную
+
+        self.dlgSaveAs = Gtk.FileChooserDialog()
+        self.dlgSaveAs.set_title('Выбор файла для сохранения статистики')
+        self.dlgSaveAs.set_action(Gtk.FileChooserAction.SAVE)
+        self.dlgSaveAs.set_do_overwrite_confirmation(True)
+
+        self.dlgSaveAs.add_buttons('Отмена', Gtk.ResponseType.CANCEL,
+            'OK', Gtk.ResponseType.OK)
+        self.dlgSaveAs.set_default_response(Gtk.ResponseType.OK)
+
+        for fltname, fltpat in (('Текстовые файлы', '*.txt'), ('Все файлы', '*.*')):
+                fltr = Gtk.FileFilter()
+                fltr.set_name(fltname)
+                fltr.add_pattern(fltpat)
+                self.dlgSaveAs.add_filter(fltr)
         #
         #
         #
@@ -342,39 +378,21 @@ class PhotoStatUI():
         self.btnResultSave.set_sensitive(bSave)
 
     def save_stat_to_file(self):
-        def get_save_file_name():
-            dlg = Gtk.FileChooserDialog('Сохранение статистики в файл', self.window,
-                Gtk.FileChooserAction.SAVE)
+        self.dlgSaveAs.select_filename(self.config.cfgStatSaveFile)
 
-            dlg.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        self.dlgSaveAs.show()
+        r = self.dlgSaveAs.run()
+        self.dlgSaveAs.hide()
 
-            fdir, fname = os.path.split(self.config.cfgStatSaveFile)
-            dlg.set_current_folder(fdir)
-            dlg.set_current_name(fname)
-
-            for fltname, fltpat in (('Текстовые файлы', '*.txt'), ('Все файлы', '*.*')):
-                fltr = Gtk.FileFilter()
-                fltr.set_name(fltname)
-                fltr.add_pattern(fltpat)
-                dlg.add_filter(fltr)
-
-            r = dlg.run()
-            if r == Gtk.ResponseType.OK:
-                self.config.cfgStatSaveFile = dlg.get_filename()
-
-            dlg.destroy()
-
-            return r == Gtk.ResponseType.OK
-
-        if get_save_file_name():
+        if r == Gtk.ResponseType.OK:
+            self.config.cfgStatSaveFile = self.dlgSaveAs.get_filename()
             try:
-                #raise ValueError('Boo!')
                 with open(self.config.cfgStatSaveFile, 'w+') as f:
                     f.write(self.stats.get_stat_tables_str())
             except Exception as ex:
                 msg_dialog(self.window, 'Сохранение статистики в файл',
                                'Не удалось сохранить файл.\n%s' % exception_to_str(ex))
+
     def copy_stat_to_clipboard(self):
         try:
             cb = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)

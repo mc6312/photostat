@@ -33,6 +33,8 @@ class AboutDialog():
         self.dlgabout.set_copyright(APP_COPYRIGHT)
         self.dlgabout.set_version('v%s' % APP_VERSION)
         self.dlgabout.set_program_name(APP_TITLE)
+        self.dlgabout.set_website(APP_URL)
+        self.dlgabout.set_website_label(APP_URL)
 
         # загрузка ресурсов
         iconsize = WIDGET_BASE_WIDTH * 24
